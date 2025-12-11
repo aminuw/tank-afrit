@@ -378,23 +378,23 @@ async function cleanupOldGames() {
 }
 
 // Export des fonctions
+// Export des fonctions
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        initFirebase,
-        generatePlayerId,
-        generateGameCode,
-        createGame,
-        joinGame,
-        setPlayerReady,
-        leaveGame,
-        listenToGame,
-        stopListening,
-        updatePlayerPosition,
-        sendBullet,
-        sendHit,
-        setPlayerDead,
-        getActiveGames,
-        listenToPublicGames,
-        cleanupOldGames
+        initFirebase, generatePlayerId, generateGameCode, createGame, joinGame,
+        setPlayerReady, leaveGame, listenToGame, stopListening, updatePlayerPosition,
+        sendBullet, sendHit, setPlayerDead, getActiveGames, listenToPublicGames, cleanupOldGames
     };
+}
+
+// Export explicite pour le navigateur
+if (typeof window !== 'undefined') {
+    window.initFirebase = initFirebase;
+    window.createGame = createGame;
+    window.joinGame = joinGame;
+    window.listenToPublicGames = listenToPublicGames;
+    window.sendBullet = sendBullet;
+    window.sendHit = sendHit;
+    window.updatePlayerPosition = updatePlayerPosition;
+    window.listenToGame = listenToGame;
 }

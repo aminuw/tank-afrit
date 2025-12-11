@@ -757,9 +757,14 @@ class BattleRoyaleGame {
             }
 
             if (!this.isHost && gameData.zone) {
+                const sRadius = gameData.zone.radius || BR_CONFIG.INITIAL_ZONE_RADIUS;
+                // Anti-TP : On ne force le radius que si l'ecart est grand (>100px)
+                // Sinon on fait confiance a la prediction locale qui va s'ajuster avec la phase
+                if (!this.zone.currentRadius || Math.abs(this.zone.currentRadius - sRadius) > 100) {
+                    this.zone.currentRadius = sRadius;
+                }
                 this.zone.centerX = gameData.zone.centerX || BR_CONFIG.MAP_WIDTH / 2;
                 this.zone.centerY = gameData.zone.centerY || BR_CONFIG.MAP_HEIGHT / 2;
-                this.zone.currentRadius = gameData.zone.radius || BR_CONFIG.INITIAL_ZONE_RADIUS;
                 this.zone.phase = gameData.zone.phase || 0;
                 this.zone.phaseTimer = gameData.zone.phaseTimer || 0;
             }
@@ -985,9 +990,9 @@ class BattleRoyaleGame {
 
         this.updateBullets(dt);
 
-        if (this.isHost) {
-            this.zone.update(dt);
+        this.zone.update(dt); // Prediction locale pour tout le monde (visuel fluide)
 
+        if (this.isHost) {
             if (t - this.lastZoneSyncTime > BR_CONFIG.ZONE_SYNC_INTERVAL) {
                 this.syncZoneToFirebase();
                 this.lastZoneSyncTime = t;
