@@ -1,5 +1,9 @@
-// CLIENT JEU - SOCKET.IO (Ultra low latency)
-const socket = io();
+// CLIENT JEU - SOCKET.IO
+// Auto-detect URL: Si localhost mais pas port 3000 (ex: WAMP), forcer 3000. Sinon auto (Render/Heroku/LocalNode).
+const socketUrl = (window.location.hostname === 'localhost' && window.location.port !== '3000')
+    ? 'http://localhost:3000'
+    : undefined;
+const socket = io(socketUrl);
 
 // Variables globales pour le jeu
 let myPlayerId = null;
