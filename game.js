@@ -812,6 +812,14 @@ class BossTank extends Tank {
         return bullet;
     }
 
+    takeDamage(amt) {
+        // Boss is invulnerable while in cage
+        if (this.inCage) {
+            return false;
+        }
+        return super.takeDamage(amt);
+    }
+
     draw(ctx) {
         if (!this.isAlive) return;
 
@@ -1557,15 +1565,22 @@ class Game {
             if (this.boss && this.boss.isAlive && b.ownerId === 'player' && b.checkCollision(this.boss)) {
                 b.isAlive = false;
                 const killed = this.boss.takeDamage(b.damage);
-                this.floatingTexts.push(new FloatingText(this.boss.x, this.boss.y - 30, `-${b.damage}`, '#FFEB3B', 20));
 
-                if (killed) {
-                    this.explosions.push(new Explosion(this.boss.x, this.boss.y, 80, true));
-                    this.addShake(25);
-                    this.triggerSlowMo();
+                // Show invulnerability message if boss is in cage
+                if (this.boss.inCage) {
+                    this.floatingTexts.push(new FloatingText(this.boss.x, this.boss.y - 30, 'INVULNÉRABLE', '#FFD700', 24));
+                    this.explosions.push(new Explosion(b.x, b.y, 15)); // Small spark
                 } else {
-                    this.explosions.push(new Explosion(b.x, b.y, 20));
-                    this.addShake(5);
+                    this.floatingTexts.push(new FloatingText(this.boss.x, this.boss.y - 30, `-${b.damage}`, '#FFEB3B', 20));
+
+                    if (killed) {
+                        this.explosions.push(new Explosion(this.boss.x, this.boss.y, 80, true));
+                        this.addShake(25);
+                        this.triggerSlowMo();
+                    } else {
+                        this.explosions.push(new Explosion(b.x, b.y, 20));
+                        this.addShake(5);
+                    }
                 }
             }
         }
@@ -1986,6 +2001,18 @@ class Game {
             ctx.fillStyle = dashReady ? '#00FFFF' : '#666';
             ctx.fillText(`[SHIFT] DASH ${dashReady ? '✓' : '...'}`, bx, by + 45);
         }
+
+        // Enemy counter (NEW - shows remaining enemies and boss status)
+        const enemyCount = this.enemies.length;
+        const bossStatus = this.boss && this.boss.isAlive ? (this.boss.inCage ? '🔒' : '👑') : '';
+
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 20px Rajdhani, sans-serif';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(this.canvas.width / 2 - 100, p, 200, 35);
+
+        ctx.fillStyle = enemyCount > 0 ? '#FF5722' : '#4CAF50';
+        ctx.fillText(`Ennemis: ${enemyCount} ${bossStatus}`, this.canvas.width / 2, p + 23);
 
         ctx.textAlign = 'center';
         ctx.font = '14px Rajdhani, sans-serif';
