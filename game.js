@@ -2219,13 +2219,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (result) {
                     console.log('Partie créée ! Code: ' + result.gameCode);
                     brLobby.classList.add('hidden');
-                    new BattleRoyaleGame(
-                        document.getElementById('gameCanvas'),
-                        playerName,
-                        playerSkin,
-                        result.gameCode,
-                        true
-                    );
+                    
+                    // Afficher la salle d'attente
+                    new WaitingRoom(result.gameCode, true, playerName);
                 }
             } catch (error) {
                 alert('Erreur lors de la création: ' + error.message);
@@ -2255,13 +2251,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await joinGame(gameCode, playerName, playerSkin);
                 console.log('Partie rejointe ! Code: ' + result.gameCode);
                 brLobby.classList.add('hidden');
-                new BattleRoyaleGame(
-                    document.getElementById('gameCanvas'),
-                    playerName,
-                    playerSkin,
-                    result.gameCode,
-                    false
-                );
+                
+                // Afficher la salle d'attente
+                new WaitingRoom(result.gameCode, false, playerName);
             } catch (error) {
                 alert('Erreur: ' + error.message);
             }
@@ -2277,3 +2269,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
