@@ -1,8 +1,8 @@
-// P2P MANAGER - V3 (FINAL & ROBUST)
+// P2P MANAGER - V4 (ID FIX)
 // Architecture Hybride : Lobby Firebase + Gameplay PeerJS
-// Compatible 100% avec le code existant (WaitingRoom, etc.)
+// Compatible 100% avec le code existant
 
-// --- VARIABLES GLOBALES (Compatibilité) ---
+// --- VARIABLES GLOBALES ---
 window.currentGameRef = null;
 window.database = null;
 window.currentPlayerId = null;
@@ -23,14 +23,10 @@ const firebaseConfig = {
 let peer = null;
 let myPeerId = null;
 let isHost = false;
-let hostConnection = null; // Client -> Host
-let connections = {}; // Host -> Clients { peerId: conn }
+let hostConnection = null;
+let connections = {};
 let gameUpdateCallback = null;
-let gameState = {
-    players: {},
-    bullets: {},
-    zone: { radius: 1200, centerX: 1200, centerY: 800 }
-};
+let gameState = { players: {}, bullets: {}, zone: { radius: 1200, centerX: 1200, centerY: 800 } };
 
 // --- INITIALISATION ---
 function initFirebase() {
@@ -39,21 +35,16 @@ function initFirebase() {
     }
     window.database = firebase.database();
 
-    // Init PeerJS (pour le jeu futur)
     peer = new Peer(null, { debug: 1 });
-
     peer.on('open', (id) => {
         console.log('✅ P2P ID:', id);
         myPeerId = id;
     });
 
-    // Ecoute des connexions P2P (Host & Client)
     peer.on('connection', handleP2PConnection);
-
-    return true; // Pret pour le Lobby
+    return true;
 }
 
-// Helper: Attendre que le PeerID soit prêt
 function waitForPeerId() {
     return new Promise(resolve => {
         if (myPeerId) return resolve(myPeerId);
@@ -70,13 +61,13 @@ async function createGame(name, skin, isPublic) {
     isHost = true;
 
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const playerId = 'host_' + myPeerId;
+    // FIX: ID Unique propre au PC (plus de prefixe bizarre)
+    const playerId = myPeerId;
     window.currentPlayerId = playerId;
 
-    // Données pour le Lobby Firebase
     const gameData = {
         host: playerId,
-        hostPeerId: myPeerId, // Important pour le P2P
+        hostPeerId: myPeerId,
         status: 'waiting',
         isPublic: isPublic,
         createdAt: firebase.database.ServerValue.TIMESTAMP,
@@ -91,15 +82,12 @@ async function createGame(name, skin, isPublic) {
         }
     };
 
-    // Ecriture Firebase (Permet à WaitingRoom de fonctionner)
     window.currentGameRef = database.ref('games/' + code);
     await window.currentGameRef.set(gameData);
 
-    // Initialiser la boucle P2P du Host
-    // On prépare le state physique pour quand le jeu commencera
+    // Init Boucle Host
     gameState.players = {};
-    gameState.players[myPeerId] = { ...gameData.players[playerId], x: 0, y: 0, hp: 100, alive: true };
-
+    gameState.players[playerId] = { ...gameData.players[playerId], x: 0, y: 0, hp: 100, alive: true };
     startHostLoop();
 
     return { gameCode: code };
@@ -112,15 +100,15 @@ async function joinGame(code, name, skin) {
 
     window.currentGameRef = database.ref('games/' + code);
 
-    // 1. Vérifier existence partie
     const snapshot = await window.currentGameRef.once('value');
     const gameVal = snapshot.val();
     if (!gameVal) throw new Error("Partie introuvable");
 
-    const playerId = 'player_' + myPeerId;
+    // FIX: ID Unique propre au PC
+    const playerId = myPeerId;
     window.currentPlayerId = playerId;
 
-    // 2. S'ajouter au Lobby Firebase (Visible dans WaitingRoom)
+    // S'assurer qu'on n'est pas déjà dans la liste (doublon impossible car clé = ID)
     await window.currentGameRef.child('players/' + playerId).set({
         name: name,
         skin: skin,
@@ -129,12 +117,10 @@ async function joinGame(code, name, skin) {
         ready: false
     });
 
-    // 3. Initier la connexion P2P cachée vers le Host
+    // Connexion P2P
     const hostPeerId = gameVal.hostPeerId;
-    if (hostPeerId) {
+    if (hostPeerId && hostPeerId !== myPeerId) {
         connectToHostP2P(hostPeerId, name, skin);
-    } else {
-        console.error("❌ Pas de HostPeerID trouvé dans la partie !");
     }
 
     return { gameCode: code, players: gameVal.players };
@@ -143,71 +129,59 @@ async function joinGame(code, name, skin) {
 // --- LOGIQUE P2P (JEU) ---
 
 function connectToHostP2P(hostId, name, skin) {
-    console.log("🔗 Connexion P2P vers", hostId);
+    console.log("🔗 Connecting P2P to", hostId);
     const conn = peer.connect(hostId);
     hostConnection = conn;
 
     conn.on('open', () => {
-        console.log("✅ P2P Connecté au Host !");
-        // Handshake P2P
+        console.log("✅ LIVE Connected!");
         conn.send({ type: 'JOIN_P2P', name, skin, peerId: myPeerId });
     });
 
     conn.on('data', onP2PData);
-    conn.on('error', err => console.error("Erreur P2P:", err));
+    conn.on('error', err => console.error("P2P Error:", err));
 }
 
 function handleP2PConnection(conn) {
     if (isHost) {
-        // Le Host enregistre le client
-        console.log("🔗 Client connecté P2P:", conn.peer);
+        console.log("🔗 Client connected:", conn.peer);
         connections[conn.peer] = conn;
         conn.on('data', (data) => onHostReceiveData(data, conn));
         conn.on('close', () => {
-            // Nettoyage si déco
             delete gameState.players[conn.peer];
             delete connections[conn.peer];
         });
     } else {
-        // Le Client recoit une connexion inverse? (Rare avec PeerJS simple)
         conn.on('data', onP2PData);
     }
+
 }
 
-// HOST : Recevoir Données des Clients
 function onHostReceiveData(packet, conn) {
     const senderPeerId = conn.peer;
 
     if (packet.type === 'JOIN_P2P') {
-        // Initialiser joueur dans le moteur physique
         gameState.players[senderPeerId] = {
             name: packet.name, skin: packet.skin,
             hp: 100, alive: true, x: 0, y: 0, angle: 0, turretAngle: 0,
             peerId: senderPeerId
         };
-        // Sync Force
         conn.send({ type: 'STATE', state: gameState });
     }
     else if (packet.type === 'MOVE') {
-        if (gameState.players[senderPeerId]) {
-            Object.assign(gameState.players[senderPeerId], packet.data);
-        }
+        if (gameState.players[senderPeerId]) Object.assign(gameState.players[senderPeerId], packet.data);
     }
     else if (packet.type === 'SHOOT') {
-        // Relayer le tir à tout le monde
         broadcastP2P({ type: 'BULLET', data: packet.data });
     }
 }
 
-// CLIENT : Recevoir Etat du Monde
 function onP2PData(packet) {
     if (packet.type === 'STATE') {
         gameState = packet.state;
-        // Injecter dans le moteur du jeu local
         if (gameUpdateCallback) gameUpdateCallback(gameState);
     }
     else if (packet.type === 'BULLET') {
-        // Injecter balle
         if (gameUpdateCallback) gameUpdateCallback({ bullets: { [packet.data.id]: packet.data } });
     }
 }
@@ -215,28 +189,20 @@ function onP2PData(packet) {
 function startHostLoop() {
     setInterval(() => {
         if (isHost) {
-            // Envoyer l'état du monde à tout le monde (Sync)
             broadcastP2P({ type: 'STATE', state: gameState });
-            // Update Local
             if (gameUpdateCallback) gameUpdateCallback(gameState);
         }
-    }, 33); // ~30 FPS
+    }, 33);
 }
 
 function broadcastP2P(msg) {
-    Object.values(connections).forEach(c => {
-        if (c.open) c.send(msg);
-    });
+    Object.values(connections).forEach(c => { if (c.open) c.send(msg); });
 }
 
-// --- BRIDGE GAME.JS ---
-
 function updatePlayerPosition(code, id, data) {
-    // Si Host, on update direct le state master
     if (isHost) {
         if (gameState.players[myPeerId]) Object.assign(gameState.players[myPeerId], data);
     }
-    // Si Client, on envoie au Host
     else if (hostConnection && hostConnection.open) {
         hostConnection.send({ type: 'MOVE', data });
     }
@@ -248,13 +214,11 @@ function sendBullet(id, x, y, a, d) {
     else if (hostConnection && hostConnection.open) hostConnection.send({ type: 'SHOOT', data: b });
 }
 
-function sendHit(targetId, damage) {
-    // TODO: hit validation serverside ideally
-}
+function sendHit(targetId, damage) { }
 
 function listenToGame(cb) { gameUpdateCallback = cb; }
 
-// --- STUBS COMPATIBILITE (Ne pas toucher) ---
+// STUBS
 function generatePlayerId() { return window.currentPlayerId || 'init_' + Date.now(); }
 function getActiveGames(cb) { database.ref('games').limitToLast(10).once('value', s => cb(s.val() || {})); }
 function setPlayerReady(isReady) {
@@ -269,7 +233,6 @@ function stopListening() { gameUpdateCallback = null; }
 function setPlayerDead() { }
 function listenToPublicGames() { }
 
-// Exports
 window.initFirebase = initFirebase;
 window.createGame = createGame;
 window.joinGame = joinGame;
