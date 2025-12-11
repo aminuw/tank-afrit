@@ -2552,10 +2552,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const joinGameBtn = document.getElementById('join-game-btn');
     if (joinGameBtn) {
         joinGameBtn.addEventListener('click', async () => {
-            const gameCode = document.getElementById('game-code-input').value.trim().toUpperCase();
+            const gameCode = document.getElementById('game-code-input').value.trim();
 
-            if (!gameCode || gameCode.length !== 4) {
-                alert('Veuillez entrer un code de partie valide (4 caractères)');
+            if (!gameCode || gameCode.length < 3) {
+                alert('Veuillez entrer un ID valide');
                 return;
             }
 

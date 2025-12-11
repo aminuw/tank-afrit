@@ -269,8 +269,8 @@
                     <button id="create-game-btn" class="btn-primary">🎮 CRÉER UNE PARTIE</button>
                     <div class="or-divider">- OU -</div>
                     <div class="join-game-section">
-                        <input type="text" id="game-code-input" placeholder="Code de partie (ex: A7B2)" maxlength="4"
-                            style="text-transform: uppercase;">
+                        <input type="text" id="game-code-input" placeholder="Collez l'ID ici..." maxlength="100"
+                            style="text-transform: none; font-size: 0.9em;">
                         <button id="join-game-btn" class="btn-secondary">🚀 REJOINDRE</button>
                     </div>
                 </div>
@@ -321,13 +321,11 @@
         </footer>
     </div>
 
-    <!-- Firebase SDK (Lobby) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <!-- PeerJS (Jeu P2P) -->
+    <!-- PeerJS (Moteur P2P) -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <!-- Hybride Manager -->
-    <script src="p2p-manager.js"></script>
+
+    <!-- Moteur Réseau Direct (Zéro Serveur) -->
+    <script src="network-direct.js"></script>
 
     <!-- Game Script (must load first - defines Tank, Explosion, etc. classes) -->
     <script src="game.js"></script>
