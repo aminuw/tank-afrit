@@ -1,7 +1,7 @@
 {
-  "name": "tank-brawler-lan",
-  "version": "2.0.0",
-  "description": "High Performance LAN Version",
+  "name": "tank-brawler-server",
+  "version": "1.0.0",
+  "description": "Serveur de jeu Node.js ultra-rapide (Socket.io)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

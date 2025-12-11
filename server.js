@@ -1,148 +1,108 @@
 const express = require('express');
-const app = express();
 const http = require('http');
-const server = http.createServer(app);
 const { Server } = require("socket.io");
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" },
     pingInterval: 2000,
     pingTimeout: 5000
 });
 
-app.use(express.static('.')); // Servir les fichiers du dossier courant
+// Servir les fichiers statiques (Le Jeu)
+app.use(express.static(__dirname));
 
-// Etat du jeu
-const games = {};
-
-// Constantes
-const TICK_RATE = 60; // 60 mises a jour par seconde (Fluidite max)
+// Etat du jeu (Mémoire Serveur)
+let games = {};
 
 io.on('connection', (socket) => {
-    console.log('Nouveau joueur connecte:', socket.id);
-    let currentGameCode = null;
+    console.log('⚡ Joueur connecté:', socket.id);
 
-    // Creation de partie
-    socket.on('createGame', (data) => {
-        const gameCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-        games[gameCode] = {
+    socket.on('createGame', ({ name, skin }) => {
+        const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+        games[code] = {
             players: {},
             bullets: [],
-            obstacles: [], // La map
-            zone: {
-                centerX: 2400 / 2,
-                centerY: 1600 / 2,
-                radius: 1200,
-                phase: 0,
-                phaseTimer: 0
-            },
-            host: socket.id,
-            status: 'waiting'
+            status: 'waiting',
+            hostId: socket.id
         };
-        socket.emit('gameCreated', { code: gameCode });
+        joinGameLocally(socket, code, name, skin, true);
     });
 
-    // Rejoindre une partie
     socket.on('joinGame', ({ code, name, skin }) => {
-        const game = games[code];
-        if (game) {
-            currentGameCode = code;
-            socket.join(code);
-
-            // Ajouter le joueur
-            game.players[socket.id] = {
-                id: socket.id,
-                name: name,
-                skin: skin,
-                x: 0,
-                y: 0,
-                angle: 0,
-                turretAngle: 0,
-                hp: 100,
-                alive: true,
-                score: 0
-            };
-
-            // Informer tout le monde
-            io.to(code).emit('playerJoined', {
-                id: socket.id,
-                players: game.players,
-                isHost: socket.id === game.host
-            });
+        code = code.toUpperCase(); // Tolérance majuscule
+        if (games[code]) {
+            joinGameLocally(socket, code, name, skin, false);
         } else {
             socket.emit('error', 'Partie introuvable');
         }
     });
 
-    // Mouvement du joueur
-    socket.on('playerMove', (data) => {
-        if (!currentGameCode || !games[currentGameCode]) return;
-        const player = games[currentGameCode].players[socket.id];
-        if (player) {
-            player.x = data.x;
-            player.y = data.y;
-            player.angle = data.angle;
-            player.turretAngle = data.turretAngle;
+    socket.on('playerInput', (data) => {
+        // Relai ultra-rapide des positions (Client Authoritative pour la fluidité)
+        // Pour un jeu "Zero Lag" perçu, on fait confiance au client pour le mouvement
+        // et on broadcast immédiatement.
+        const room = getPlayerRoom(socket);
+        if (room) {
+            socket.to(room).emit('playerMoved', { id: socket.id, data: data });
         }
     });
 
-    // Tir
     socket.on('shoot', (bulletData) => {
-        if (!currentGameCode || !games[currentGameCode]) return;
-        // On relaie immediatement la balle aux autres (Zero latency perception)
-        socket.to(currentGameCode).emit('newBullet', bulletData);
-    });
-
-    // Touche / Degats
-    socket.on('hit', ({ targetId, damage }) => {
-        if (!currentGameCode || !games[currentGameCode]) return;
-        const game = games[currentGameCode];
-        const target = game.players[targetId];
-
-        if (target && target.alive) {
-            target.hp -= damage;
-            if (target.hp <= 0) {
-                target.hp = 0;
-                target.alive = false;
-                io.to(currentGameCode).emit('playerDied', {
-                    victimId: targetId,
-                    killerId: socket.id
-                });
-            }
-            // Mettre a jour la vie pour tout le monde
-            io.to(currentGameCode).emit('playerHealthUpdate', {
-                id: targetId,
-                hp: target.hp
-            });
+        const room = getPlayerRoom(socket);
+        if (room) {
+            io.to(room).emit('bulletFired', bulletData);
         }
     });
 
-    // Deconnexion
-    socket.on('disconnect', () => {
-        if (currentGameCode && games[currentGameCode]) {
-            delete games[currentGameCode].players[socket.id];
-            io.to(currentGameCode).emit('playerLeft', socket.id);
+    socket.on('startGame', () => {
+        const code = getPlayerRoom(socket);
+        if (code && games[code].hostId === socket.id) {
+            games[code].status = 'playing';
+            io.to(code).emit('gameStarted');
+        }
+    });
 
-            // Si l'hote part, on ferme ? Ou on migre ? Pour l'instant on laisse.
-            if (Object.keys(games[currentGameCode].players).length === 0) {
-                delete games[currentGameCode];
+    socket.on('disconnect', () => {
+        const code = getPlayerRoom(socket);
+        if (code) {
+            delete games[code].players[socket.id];
+            io.to(code).emit('playerLeft', socket.id);
+            // Si plus personne, on supprime la room
+            if (Object.keys(games[code].players).length === 0) {
+                delete games[code];
             }
         }
     });
 });
 
-// Boucle principale du serveur (Heartbeat)
-setInterval(() => {
-    Object.keys(games).forEach(code => {
-        const game = games[code];
-        // Envoi du snapshot du monde a tous les joueurs (60 fois par seconde)
-        io.to(code).emit('worldUpdate', {
-            players: game.players,
-            zone: game.zone
-        });
-    });
-}, 1000 / TICK_RATE);
+function joinGameLocally(socket, code, name, skin, isHost) {
+    socket.join(code);
+    games[code].players[socket.id] = {
+        id: socket.id,
+        name, skin,
+        isHost,
+        hp: 100
+    };
 
-const PORT = 3000;
+    // Renvoyer infos au joueur
+    socket.emit('gameJoined', { code, isHost, playerId: socket.id });
+
+    // Mettre à jour tout le monde dans la room
+    io.to(code).emit('updatePlayerList', games[code].players);
+}
+
+function getPlayerRoom(socket) {
+    // Array.from car socket.rooms est un Set
+    for (const room of Array.from(socket.rooms)) {
+        if (games[room]) return room;
+    }
+    return null;
+}
+
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SERVEUR GAMING LAN: http://localhost:${PORT}`);
+    console.log(`🚀 SERVEUR JEU READY sur port ${PORT}`);
 });
