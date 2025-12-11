@@ -155,9 +155,10 @@ class WaitingRoom {
     }
 
     async startGame() {
-        if (this.players.size < this.minPlayers) {
-            alert(`Il faut au moins ${this.minPlayers} joueurs pour commencer !`);
-            return;
+        const btn = document.getElementById('start-game-btn');
+        if (btn) {
+            btn.innerText = "Lancement en cours...";
+            btn.disabled = true;
         }
 
         try {
@@ -167,40 +168,55 @@ class WaitingRoom {
                 startTime: firebase.database.ServerValue.TIMESTAMP
             });
 
-            console.log('🚀 Partie lancée !');
+            console.log('🚀 Partie lancée sur le réseau !');
         } catch (error) {
             console.error('Erreur lors du lancement:', error);
-            alert('Erreur lors du lancement de la partie');
+            alert('Erreur réseau lors du lancement : ' + error.message);
+            // On réactive le bouton pour réessayer
+            if (btn) {
+                btn.innerText = "🚀 LANCER LA PARTIE";
+                btn.disabled = false;
+            }
         }
     }
 
     onGameStart() {
-        // Fermer la salle d'attente
-        const overlay = document.getElementById('waiting-room-overlay');
-        if (overlay) {
-            overlay.remove();
-        }
+        console.log('🎮 Début de l\'initialisation du jeu...');
 
-        console.log('🎮 La partie commence !');
+        try {
+            // Fermer la salle d'attente
+            const overlay = document.getElementById('waiting-room-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
 
-        // LANCER LE JEU BATTLE ROYALE!
-        const canvas = document.getElementById('gameCanvas');
-        if (canvas) {
-            // Créer et démarrer le jeu BR avec les paramètres actuels
-            const brGame = new BattleRoyaleGame(
-                canvas,
-                this.playerName,
-                this.playerSkin,
-                this.gameCode,
-                this.isHost
-            );
+            console.log('🎮 La partie commence !');
 
-            // Stocker la référence globalement
-            window.currentBRGame = brGame;
+            // LANCER LE JEU BATTLE ROYALE!
+            const canvas = document.getElementById('gameCanvas');
+            if (canvas) {
+                // Créer et démarrer le jeu BR avec les paramètres actuels
+                const brGame = new BattleRoyaleGame(
+                    canvas,
+                    this.playerName,
+                    this.playerSkin,
+                    this.gameCode,
+                    this.isHost
+                );
 
-            console.log('🚀 BattleRoyaleGame lancé!');
-        } else {
-            console.error('❌ Canvas introuvable!');
+                // Si on a le loop, on le lance
+                if (brGame.loop) requestAnimationFrame(t => brGame.loop(t));
+
+                // Stocker la référence globalement
+                window.currentBRGame = brGame;
+
+                console.log('🚀 BattleRoyaleGame lancé avec succès !');
+            } else {
+                alert('Erreur fatale : Canvas introuvable !');
+            }
+        } catch (e) {
+            alert('CRASH DU JEU AU DEMARRAGE : ' + e.message);
+            console.error(e);
         }
     }
 
