@@ -446,151 +446,83 @@ class RemotePlayer {
         this.turretAngle = 0;
 
         // Position cible du serveur
-        this.serverX = 0;
-        this.serverY = 0;
-        this.serverAngle = 0;
-        this.serverTurretAngle = 0;
+        super(id, 0, 0, {
+            name: name,
+            color: skin ? skin.color : '#F44336',
+            color2: skin ? skin.color2 : '#B71C1C'
+        });
 
-        // Velocite calculee pour prediction
-        this.velocityX = 0;
-        this.velocityY = 0;
-        this.angularVelocity = 0;
-
-        // Buffer de positions pour lissage
-        this.positionBuffer = [];
-
-        // Timestamps
-        this.lastServerUpdate = 0;
-        this.lastUpdateTimestamp = 0;
-
-        this.health = 100;
-        this.maxHealth = 100;
+        // BUFFER SNAPSHOT : Stocke l'etat du monde a des instants T pour interpolation
+        this.snapshots = [];
+        this.INTERPOLATION_OFFSET = 100; // ms de retard constant pour fluidite
         this.isAlive = true;
-        this.hidden = false;
-        this.size = 35;
-        this.turretLength = 45;
-
-        this.initialized = false;
     }
 
     // Recevoir une mise a jour du serveur
     updateFromServer(data) {
         const now = Date.now();
 
-        // Ignorer les donnees plus anciennes que la derniere update
-        if (this.lastUpdateTimestamp > 0 && data.lastUpdate && data.lastUpdate < this.lastUpdateTimestamp) {
-            return; // Ignorer cette update obsolete
-        }
+        this.snapshots.push({
+            t: now,
+            x: data.x,
+            y: data.y,
+            angle: data.angle,
+            turretAngle: data.turretAngle,
+            health: data.health,
+            alive: data.alive !== false,
+            hidden: data.hidden || false
+        });
 
-        if (data.lastUpdate) {
-            this.lastUpdateTimestamp = data.lastUpdate;
-        }
+        // Garder le buffer propre
+        while (this.snapshots.length > 20) this.snapshots.shift();
 
-        const newX = data.x !== undefined ? data.x : this.serverX;
-        const newY = data.y !== undefined ? data.y : this.serverY;
-        const newAngle = data.angle !== undefined ? data.angle : this.serverAngle;
-        const newTurretAngle = data.turretAngle !== undefined ? data.turretAngle : this.serverTurretAngle;
+        this.hidden = data.hidden || false;
+        if (data.health !== undefined) this.health = data.health;
+        if (data.alive !== undefined) this.isAlive = data.alive;
+    }
 
-        // Calculer la velocite si on a une position precedente
-        if (this.lastServerUpdate > 0 && this.initialized) {
-            const timeDelta = (now - this.lastServerUpdate) / 1000;
-            if (timeDelta > 0 && timeDelta < 1) {
-                this.velocityX = (newX - this.serverX) / timeDelta;
-                this.velocityY = (newY - this.serverY) / timeDelta;
+    // Mise a jour position : Interpolation entre deux snapshots
+    update(dt) {
+        const renderTime = Date.now() - this.INTERPOLATION_OFFSET;
 
-                let angleDiff = newAngle - this.serverAngle;
-                while (angleDiff > 180) angleDiff -= 360;
-                while (angleDiff < -180) angleDiff += 360;
-                this.angularVelocity = angleDiff / timeDelta;
+        let prev = null;
+        let next = null;
+
+        // Trouver les snapshots entourant le temps de rendu
+        for (let i = this.snapshots.length - 1; i >= 0; i--) {
+            if (this.snapshots[i].t <= renderTime) {
+                prev = this.snapshots[i];
+                if (i + 1 < this.snapshots.length) next = this.snapshots[i + 1];
+                break;
             }
         }
 
-        this.serverX = newX;
-        this.serverY = newY;
-        this.serverAngle = newAngle;
-        this.serverTurretAngle = newTurretAngle;
+        if (prev && next) {
+            // Interpolation
+            const totalTime = next.t - prev.t;
+            const ratio = Math.max(0, Math.min(1, (renderTime - prev.t) / totalTime));
 
-        // Ajouter au buffer
-        this.positionBuffer.push({ x: newX, y: newY, angle: newAngle, time: now });
-        while (this.positionBuffer.length > BR_CONFIG.POSITION_BUFFER_SIZE) {
-            this.positionBuffer.shift();
+            this.x = prev.x + (next.x - prev.x) * ratio;
+            this.y = prev.y + (next.y - prev.y) * ratio;
+
+            let angleDiff = next.angle - prev.angle;
+            while (angleDiff > 180) angleDiff -= 360;
+            while (angleDiff < -180) angleDiff += 360;
+            this.angle = prev.angle + angleDiff * ratio;
+
+            let turretDiff = next.turretAngle - prev.turretAngle;
+            while (turretDiff > 180) turretDiff -= 360;
+            while (turretDiff < -180) turretDiff += 360;
+            this.turretAngle = prev.turretAngle + turretDiff * ratio;
+        } else if (prev) {
+            // Extrapolation (ou maintien) si pas de futur
+            this.x = prev.x; this.y = prev.y;
+            this.angle = prev.angle; this.turretAngle = prev.turretAngle;
+        } else if (this.snapshots.length > 0) {
+            // Initialisation
+            this.x = this.snapshots[0].x; this.y = this.snapshots[0].y;
+            this.angle = this.snapshots[0].angle; this.turretAngle = this.snapshots[0].turretAngle;
         }
-
-        this.lastServerUpdate = now;
-
-        // Premiere initialisation - teleporter directement
-        if (!this.initialized && newX !== 0 && newY !== 0) {
-            this.x = newX;
-            this.y = newY;
-            this.angle = newAngle;
-            this.turretAngle = newTurretAngle;
-            this.initialized = true;
-        }
-
-        // Si trop loin, teleporter (anti-cheat ou deconnexion)
-        const dist = Math.sqrt((this.x - newX) ** 2 + (this.y - newY) ** 2);
-        if (dist > BR_CONFIG.MAX_TELEPORT_DISTANCE) {
-            this.x = newX;
-            this.y = newY;
-            this.velocityX = 0;
-            this.velocityY = 0;
-        }
-
-        // Mettre a jour les autres proprietes
-        if (data.health !== undefined) this.health = data.health;
-        this.isAlive = data.alive !== false;
-        this.hidden = data.hidden || false;
-    }
-
-    // Mise a jour chaque frame avec prediction
-    update(dt) {
-        if (!this.initialized) return;
-
-        const now = Date.now();
-        const timeSinceUpdate = (now - this.lastServerUpdate) / 1000;
-
-        // Calculer la position cible avec prediction
-        let targetX = this.serverX;
-        let targetY = this.serverY;
-        let targetAngle = this.serverAngle;
-
-        // Extrapolation : predire ou sera le joueur
-        if (timeSinceUpdate < BR_CONFIG.EXTRAPOLATION_TIME) {
-            targetX += this.velocityX * timeSinceUpdate * 0.5; // 50% de prediction
-            targetY += this.velocityY * timeSinceUpdate * 0.5;
-            targetAngle += this.angularVelocity * timeSinceUpdate * 0.3;
-        }
-
-        // Moyenner avec le buffer si disponible
-        if (this.positionBuffer.length >= 2) {
-            let avgX = 0, avgY = 0;
-            this.positionBuffer.forEach(p => {
-                avgX += p.x;
-                avgY += p.y;
-            });
-            avgX /= this.positionBuffer.length;
-            avgY /= this.positionBuffer.length;
-
-            // Blend entre la prediction et la moyenne
-            targetX = targetX * 0.7 + avgX * 0.3;
-            targetY = targetY * 0.7 + avgY * 0.3;
-        }
-
-        // Interpolation vers la cible
-        const speed = BR_CONFIG.INTERPOLATION_SPEED;
-        this.x += (targetX - this.x) * speed * dt;
-        this.y += (targetY - this.y) * speed * dt;
-
-        // Interpoler les angles
-        let angleDiff = targetAngle - this.angle;
-        while (angleDiff > 180) angleDiff -= 360;
-        while (angleDiff < -180) angleDiff += 360;
-        this.angle += angleDiff * speed * dt;
-
-        let turretDiff = this.serverTurretAngle - this.turretAngle;
-        while (turretDiff > 180) turretDiff -= 360;
-        while (turretDiff < -180) turretDiff += 360;
-        this.turretAngle += turretDiff * speed * 1.5 * dt; // Tourelle plus reactive
     }
 
     draw(ctx) {
@@ -822,6 +754,18 @@ class BattleRoyaleGame {
                 this.mapLoaded = true;
             }
 
+            if (gameData.bullets) {
+                Object.keys(gameData.bullets).forEach(bulletId => {
+                    const bData = gameData.bullets[bulletId];
+                    // Si c'est pas ma balle et qu'on la connait pas encore
+                    if (bData.ownerId !== this.localPlayerId && !this.bullets.find(b => b.id === bulletId)) {
+                        const bullet = new Bullet(bData.x, bData.y, bData.angle, bData.ownerId, bData.damage);
+                        bullet.id = bulletId;
+                        this.bullets.push(bullet);
+                    }
+                });
+            }
+
             if (!this.isHost && gameData.zone) {
                 this.zone.centerX = gameData.zone.centerX || BR_CONFIG.MAP_WIDTH / 2;
                 this.zone.centerY = gameData.zone.centerY || BR_CONFIG.MAP_HEIGHT / 2;
@@ -1037,6 +981,11 @@ class BattleRoyaleGame {
                 this.bulletCounter++;
                 bullet.id = this.localPlayerId + '_' + this.bulletCounter;
                 this.bullets.push(bullet);
+
+                // ENVOI RESEAU
+                if (typeof sendBullet === 'function') {
+                    sendBullet(bullet.id, bullet.x, bullet.y, bullet.angle, bullet.damage);
+                }
 
                 if (this.localPlayer.hidden) {
                     this.revealedUntil = t + BR_CONFIG.REVEAL_DURATION;
