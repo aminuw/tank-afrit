@@ -4,13 +4,17 @@
  */
 
 class WaitingRoom {
-    constructor(gameCode, isHost, playerName) {
+    constructor(gameCode, isHost, playerName, playerSkin = null) {
         this.gameCode = gameCode;
         this.isHost = isHost;
         this.playerName = playerName;
+        this.playerSkin = playerSkin || { color: '#2196F3', color2: '#1565C0' };
         this.players = new Map();
         this.minPlayers = 2;
         this.maxPlayers = 10;
+
+        // Sauvegarder la session immédiatement
+        this.saveSessionToStorage();
 
         this.setupUI();
         this.listenToPlayers();
@@ -177,12 +181,44 @@ class WaitingRoom {
             overlay.remove();
         }
 
-        // Le jeu Battle Royale va démarrer automatiquement
         console.log('🎮 La partie commence !');
+
+        // LANCER LE JEU BATTLE ROYALE!
+        const canvas = document.getElementById('gameCanvas');
+        if (canvas) {
+            // Créer et démarrer le jeu BR avec les paramètres actuels
+            const brGame = new BattleRoyaleGame(
+                canvas,
+                this.playerName,
+                this.playerSkin,
+                this.gameCode,
+                this.isHost
+            );
+
+            // Stocker la référence globalement
+            window.currentBRGame = brGame;
+
+            console.log('🚀 BattleRoyaleGame lancé!');
+        } else {
+            console.error('❌ Canvas introuvable!');
+        }
+    }
+
+    // Récupérer la session depuis localStorage
+    getSessionFromStorage() {
+        try {
+            const session = localStorage.getItem('tankBrawlerSession');
+            return session ? JSON.parse(session) : null;
+        } catch (e) {
+            return null;
+        }
     }
 
     async leaveRoom() {
         if (confirm('Voulez-vous vraiment quitter la partie ?')) {
+            // Supprimer la session sauvegardée
+            localStorage.removeItem('tankBrawlerSession');
+
             await leaveGame();
 
             const overlay = document.getElementById('waiting-room-overlay');
@@ -207,6 +243,24 @@ class WaitingRoom {
         const overlay = document.getElementById('waiting-room-overlay');
         if (overlay) {
             overlay.remove();
+        }
+    }
+
+    // Sauvegarder la session dans localStorage
+    saveSessionToStorage() {
+        try {
+            const session = {
+                gameCode: this.gameCode,
+                playerName: this.playerName,
+                playerSkin: this.playerSkin,
+                isHost: this.isHost,
+                playerId: currentPlayerId,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('tankBrawlerSession', JSON.stringify(session));
+            console.log('💾 Session sauvegardée:', session.gameCode, session.playerName);
+        } catch (e) {
+            console.error('Erreur sauvegarde session:', e);
         }
     }
 }

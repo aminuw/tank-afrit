@@ -2416,8 +2416,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log('Partie créée ! Code: ' + result.gameCode);
                     brLobby.classList.add('hidden');
 
-                    // Afficher la salle d'attente
-                    new WaitingRoom(result.gameCode, true, brSettings.playerName);
+                    // Afficher la salle d'attente avec le skin
+                    new WaitingRoom(result.gameCode, true, brSettings.playerName, brSettings.playerSkin);
                 }
             } catch (error) {
                 alert('Erreur lors de la création: ' + error.message);
@@ -2441,8 +2441,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Partie rejointe ! Code: ' + result.gameCode);
                 brLobby.classList.add('hidden');
 
-                // Afficher la salle d'attente
-                new WaitingRoom(result.gameCode, false, brSettings.playerName);
+                // Afficher la salle d'attente avec le skin
+                new WaitingRoom(result.gameCode, false, brSettings.playerName, brSettings.playerSkin);
             } catch (error) {
                 alert('Erreur: ' + error.message);
             }
@@ -2452,5 +2452,91 @@ document.addEventListener('DOMContentLoaded', () => {
     // ========== INITIALISER LES LOBBIES ==========
     initSoloLobby();
     initBRLobby();
+
+    // ========== RESTAURATION DE SESSION AU CHARGEMENT ==========
+    function restoreSession() {
+        try {
+            const sessionStr = localStorage.getItem('tankBrawlerSession');
+            if (!sessionStr) return;
+
+            const session = JSON.parse(sessionStr);
+
+            // Vérifier que la session n'est pas trop vieille (1 heure max)
+            const ONE_HOUR = 60 * 60 * 1000;
+            if (Date.now() - session.timestamp > ONE_HOUR) {
+                console.log('🕐 Session expirée, suppression...');
+                localStorage.removeItem('tankBrawlerSession');
+                return;
+            }
+
+            console.log('🔄 Session trouvée:', session.gameCode);
+
+            // Initialiser Firebase d'abord
+            if (typeof initFirebase === 'function' && initFirebase()) {
+                // Restaurer le playerId
+                if (session.playerId) {
+                    currentPlayerId = session.playerId;
+                }
+
+                // Vérifier si la partie existe toujours
+                const gameRef = database.ref('games/' + session.gameCode);
+                gameRef.once('value').then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const gameData = snapshot.val();
+
+                        // Vérifier si le joueur est toujours dans la partie
+                        if (gameData.players && gameData.players[session.playerId]) {
+                            console.log('✅ Partie trouvée, restauration...');
+
+                            // Restaurer la référence globale
+                            currentGameRef = gameRef;
+
+                            // Masquer les overlays
+                            modeSelection.classList.add('hidden');
+
+                            // Si la partie est en cours, lancer le jeu directement
+                            if (gameData.status === 'playing' || gameData.status === 'countdown') {
+                                console.log('🎮 Partie en cours, lancement du jeu...');
+                                const canvas = document.getElementById('gameCanvas');
+                                if (canvas) {
+                                    const brGame = new BattleRoyaleGame(
+                                        canvas,
+                                        session.playerName,
+                                        session.playerSkin,
+                                        session.gameCode,
+                                        session.isHost
+                                    );
+                                    window.currentBRGame = brGame;
+                                }
+                            } else {
+                                // Sinon afficher la salle d'attente
+                                new WaitingRoom(
+                                    session.gameCode,
+                                    session.isHost,
+                                    session.playerName,
+                                    session.playerSkin
+                                );
+                            }
+                        } else {
+                            console.log('⚠️ Joueur non trouvé dans la partie, session invalide');
+                            localStorage.removeItem('tankBrawlerSession');
+                        }
+                    } else {
+                        console.log('⚠️ Partie non trouvée, session invalide');
+                        localStorage.removeItem('tankBrawlerSession');
+                    }
+                }).catch((error) => {
+                    console.error('❌ Erreur restauration session:', error);
+                    localStorage.removeItem('tankBrawlerSession');
+                });
+            }
+        } catch (e) {
+            console.error('Erreur lecture session:', e);
+            localStorage.removeItem('tankBrawlerSession');
+        }
+    }
+
+    // Tenter de restaurer la session au chargement
+    restoreSession();
 });
 
