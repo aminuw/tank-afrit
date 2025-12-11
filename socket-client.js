@@ -28,7 +28,8 @@ window.createGame = function (name, skin) {
         socket.once('gameJoined', (data) => {
             isHost = data.isHost;
             currentGameCode = data.code;
-            resolve({ gameCode: data.code });
+            gameState.map = data.map; // Stockage de la map
+            resolve({ gameCode: data.code, map: data.map });
         });
     });
 };
@@ -40,7 +41,8 @@ window.joinGame = function (code, name, skin) {
         socket.once('gameJoined', (data) => {
             isHost = data.isHost;
             currentGameCode = data.code;
-            resolve({ gameCode: data.code });
+            gameState.map = data.map;
+            resolve({ gameCode: data.code, map: data.map });
         });
 
         socket.once('error', (err) => reject(err));
@@ -54,12 +56,11 @@ window.listenToGame = function (cb) {
 // --- EVENTS DU SERVEUR ---
 
 socket.on('updatePlayerList', (players) => {
-    // Mise à jour du lobby (WaitingRoom hook)
     if (window.waitingRoomInstance) {
         window.waitingRoomInstance.updateList(players);
     }
-    // Mise à jour du state jeu
     gameState.players = players;
+    if (gameUpdateCallback) gameUpdateCallback(gameState);
 });
 
 socket.on('gameStarted', () => {
@@ -71,8 +72,6 @@ socket.on('gameStarted', () => {
 socket.on('playerMoved', ({ id, data }) => {
     if (!gameState.players[id]) gameState.players[id] = {};
     Object.assign(gameState.players[id], data);
-
-    // Callback jeu
     if (gameUpdateCallback) gameUpdateCallback(gameState);
 });
 
@@ -80,6 +79,10 @@ socket.on('bulletFired', (bullet) => {
     if (gameUpdateCallback) gameUpdateCallback({ bullets: { [bullet.id]: bullet } });
 });
 
+socket.on('playerKilled', ({ victimId, killerId }) => {
+    console.log(`💀 ${victimId} tué par ${killerId}`);
+    // On pourrait ajouter un effet visuel ici ou dans battle-royale.js via le state update
+});
 
 // --- ACTIONS JEU ---
 
@@ -92,11 +95,16 @@ window.sendBullet = function (id, x, y, a, d) {
     socket.emit('shoot', b);
 };
 
+window.packetHit = function (targetId, damage) {
+    socket.emit('playerHit', { targetId, damage });
+};
+
 window.launchGameSignal = function () {
     socket.emit('startGame');
 };
 
-// Stub inutile mais présent pour compatibilité
+// Stub
 window.initFirebase = function () { return true; };
 window.generatePlayerId = () => socket.id;
-window.playersListHook = () => gameState.players; // Pour WaitingRoom poiling si besoin (mais on use events now)
+window.playersListHook = () => gameState.players;
+window.getMapHook = () => gameState.map;

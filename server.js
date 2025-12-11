@@ -25,6 +25,7 @@ io.on('connection', (socket) => {
         games[code] = {
             players: {},
             bullets: [],
+            map: generateMap(), // Nouveau terrain
             status: 'waiting',
             hostId: socket.id
         };
@@ -54,6 +55,24 @@ io.on('connection', (socket) => {
         const room = getPlayerRoom(socket);
         if (room) {
             io.to(room).emit('bulletFired', bulletData);
+        }
+    });
+
+    // HIT DETECTION (Shooter Authoritative)
+    socket.on('playerHit', ({ targetId, damage }) => {
+        const room = getPlayerRoom(socket);
+        if (room && games[room] && games[room].players[targetId]) {
+            const victim = games[room].players[targetId];
+            victim.hp -= damage;
+
+            // Mort ?
+            if (victim.hp <= 0) {
+                victim.hp = 0;
+                io.to(room).emit('playerKilled', { victimId: targetId, killerId: socket.id });
+            }
+
+            // Sync tout le monde
+            io.to(room).emit('updatePlayerList', games[room].players);
         }
     });
 
@@ -88,10 +107,29 @@ function joinGameLocally(socket, code, name, skin, isHost) {
     };
 
     // Renvoyer infos au joueur
-    socket.emit('gameJoined', { code, isHost, playerId: socket.id });
+    socket.emit('gameJoined', {
+        code,
+        isHost,
+        playerId: socket.id,
+        map: games[code].map // Envoi de la map
+    });
 
     // Mettre à jour tout le monde dans la room
     io.to(code).emit('updatePlayerList', games[code].players);
+}
+
+function generateMap() {
+    const map = [];
+    // 20 Obstacles aléatoires
+    for (let i = 0; i < 20; i++) {
+        map.push({
+            type: Math.random() > 0.5 ? 'rock' : 'bush',
+            x: Math.random() * 2000,
+            y: Math.random() * 2000,
+            size: 40 + Math.random() * 40
+        });
+    }
+    return map;
 }
 
 function getPlayerRoom(socket) {

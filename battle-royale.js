@@ -33,6 +33,8 @@ class BattleRoyaleGame {
         if (window.playersListHook) {
             this.players = window.playersListHook();
         }
+        // Charger la map
+        this.map = window.getMapHook ? window.getMapHook() : [];
 
         // Inputs
         this.keys = {};
@@ -71,6 +73,9 @@ class BattleRoyaleGame {
         // Abonnement aux mises à jour du serveur (via socket-client.js)
         if (window.listenToGame) {
             window.listenToGame((state) => {
+                // Mise à jour de la map si reçue tardivement
+                if (state.map) this.map = state.map;
+
                 // Mise à jour des joueurs (positions, vie...)
                 if (state.players) {
                     // CLIENT PREDICTION : On ne met à jour QUE les autres joueurs.
@@ -124,22 +129,39 @@ class BattleRoyaleGame {
         if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx -= speed;
         if (this.keys['KeyD'] || this.keys['ArrowRight']) dx += speed;
 
-        // Si je suis dans la liste des joueurs (je devrais l'être)
+        // Si je suis dans la liste des joueurs
         if (this.players[this.myId]) {
             const me = this.players[this.myId];
 
-            // Appliquer mouvement
-            me.x = (me.x || 100) + dx;
-            me.y = (me.y || 100) + dy;
+            // Tentative de mouvement
+            const nextX = (me.x || 100) + dx;
+            const nextY = (me.y || 100) + dy;
+
+            // Collision Map (Rochers)
+            let canMoveX = true, canMoveY = true;
+            if (this.map) {
+                this.map.forEach(obj => {
+                    if (obj.type === 'rock') {
+                        // Simple dist check for circle vs circle (player r=20)
+                        const dist = Math.sqrt(Math.pow(nextX - obj.x, 2) + Math.pow(me.y - obj.y, 2));
+                        if (dist < 20 + obj.size / 2) canMoveX = false;
+
+                        const distY = Math.sqrt(Math.pow(me.x - obj.x, 2) + Math.pow(nextY - obj.y, 2));
+                        if (distY < 20 + obj.size / 2) canMoveY = false;
+                    }
+                });
+            }
+
+            if (canMoveX) me.x = nextX;
+            if (canMoveY) me.y = nextY;
 
             // Calcul angle visée (vers souris)
             const dxM = this.mouseX - me.x;
             const dyM = this.mouseY - me.y;
             me.angle = Math.atan2(dyM, dxM);
 
-            // --- 2. Envoi Réseau (Optimisation : seulement si ça bouge) ---
+            // --- 2. Envoi Réseau (Optimisation) ---
             if ((dx !== 0 || dy !== 0 || true) && window.updatePlayerPosition) {
-                // Note: true force l'envoi pour la rotation aussi
                 window.updatePlayerPosition(this.gameCode, this.myId, {
                     x: me.x,
                     y: me.y,
@@ -148,13 +170,51 @@ class BattleRoyaleGame {
             }
         }
 
-        // --- 3. Update Balles ---
+        // --- 3. Update Balles & Collisions ---
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const b = this.bullets[i];
-            b.x += Math.cos(b.angle) * 800 * dt; // Vitesse balle 800
+            b.x += Math.cos(b.angle) * 800 * dt;
             b.y += Math.sin(b.angle) * 800 * dt;
 
-            // Supprimer si hors écran (simple garbage collection)
+            let bulletRemoved = false;
+
+            // Collision avec la Map
+            if (this.map) {
+                for (let obj of this.map) {
+                    if (obj.type === 'rock') {
+                        const dist = Math.sqrt(Math.pow(b.x - obj.x, 2) + Math.pow(b.y - obj.y, 2));
+                        if (dist < obj.size / 2) {
+                            this.bullets.splice(i, 1);
+                            bulletRemoved = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (bulletRemoved) continue;
+
+            // Collision avec Joueurs (Seulement si c'est MA balle -> Shooter Authoritative)
+            if (b.ownerId === this.myId) {
+                Object.values(this.players).forEach(p => {
+                    if (p.id !== this.myId && p.hp > 0) { // Pas moi même et pas mort
+                        const dist = Math.sqrt(Math.pow(b.x - p.x, 2) + Math.pow(b.y - p.y, 2));
+                        if (dist < 25) { // Hitbox joueur
+                            // HIT CONFIRMÉ !
+                            console.log("HIT sur", p.name);
+
+                            // 1. Envoi Damage au serveur
+                            if (window.packetHit) window.packetHit(p.id, 10);
+
+                            // 2. Supprimer la balle localement
+                            this.bullets.splice(i, 1);
+                            bulletRemoved = true;
+                        }
+                    }
+                });
+            }
+            if (bulletRemoved) continue;
+
+            // Supprimer si hors écran
             if (b.x < 0 || b.x > this.width || b.y < 0 || b.y > this.height) {
                 this.bullets.splice(i, 1);
             }
@@ -162,20 +222,20 @@ class BattleRoyaleGame {
     }
 
     draw() {
-        // Fond noir spatial
+        // Fond
         this.ctx.fillStyle = '#0a0a10';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Grille Cyberpunk
         this.drawGrid();
+        this.drawMap(); // Environnement
 
         // Afficher tous les joueurs
         Object.values(this.players).forEach(p => {
-            this.drawPlayer(p);
+            if (p.hp > 0) this.drawPlayer(p);
         });
 
         // Afficher les balles
-        this.ctx.fillStyle = '#ffeb3b'; // Jaune
+        this.ctx.fillStyle = '#ffeb3b';
         this.ctx.shadowBlur = 10;
         this.ctx.shadowColor = '#ffeb3b';
         this.bullets.forEach(b => {
@@ -186,16 +246,33 @@ class BattleRoyaleGame {
         this.ctx.shadowBlur = 0;
     }
 
+    drawMap() {
+        if (!this.map) return;
+        this.map.forEach(obj => {
+            if (obj.type === 'rock') {
+                this.ctx.fillStyle = '#555';
+                this.ctx.beginPath();
+                this.ctx.arc(obj.x, obj.y, obj.size / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            } else if (obj.type === 'bush') {
+                this.ctx.fillStyle = 'rgba(0, 255, 0, 0.3)'; // Semi-transparent
+                this.ctx.beginPath();
+                this.ctx.arc(obj.x, obj.y, obj.size / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        });
+    }
+
     drawPlayer(p) {
         const ctx = this.ctx;
-        if (!p.x) p.x = 200; // Position par défaut si bug
+        if (!p.x) p.x = 200;
         if (!p.y) p.y = 200;
 
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle || 0);
 
-        // Corps du Tank
+        // Corps
         ctx.fillStyle = p.skin ? p.skin.color : '#fff';
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 2;
@@ -208,14 +285,14 @@ class BattleRoyaleGame {
 
         ctx.restore();
 
-        // Nom du joueur au dessus
+        // Nom
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(p.name, p.x, p.y - 35);
 
-        // Barre de vie (HP)
-        const hp = p.hp || 100;
+        // Sante
+        const hp = (p.hp !== undefined) ? p.hp : 100;
         ctx.fillStyle = '#f00';
         ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
         ctx.fillStyle = '#0f0';
