@@ -103,7 +103,10 @@ class BattleRoyaleGame {
                 // Mise à jour des balles (nouvelles balles reçues)
                 if (state.bullets) {
                     Object.values(state.bullets).forEach(b => {
-                        this.bullets.push(b);
+                        // Anti-Doublon : Si on a déjà cette balle (créée localement), on l'ignore.
+                        if (!this.bullets.some(existing => existing.id === b.id)) {
+                            this.bullets.push(b);
+                        }
                     });
                 }
             });
@@ -235,10 +238,22 @@ class BattleRoyaleGame {
     shoot() {
         if (!this.players[this.myId]) return;
         const p = this.players[this.myId];
+        const now = Date.now();
+        const bulletId = this.myId + '_' + now;
 
-        // Envoi au serveur
+        // 1. INSTANT SHOT (Client Prediction)
+        // On affiche la balle tout de suite, sans attendre le serveur (0 latence visuelle)
+        this.bullets.push({
+            id: bulletId,
+            x: p.x,
+            y: p.y,
+            angle: p.angle,
+            ownerId: this.myId
+        });
+
+        // 2. Envoi Réseau
         if (window.sendBullet) {
-            window.sendBullet(Date.now(), p.x, p.y, p.angle, 10);
+            window.sendBullet(bulletId, p.x, p.y, p.angle, 10);
         }
     }
 
