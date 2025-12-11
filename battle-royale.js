@@ -30,6 +30,7 @@ class BattleRoyaleGame {
         this.bullets = [];
         this.explosions = [];
         this.kills = 0; // Track des kills
+        this.lastNetworkUpdate = 0; // Throttle réseau
 
         // Charger les joueurs déjà présents dans le lobby
         if (window.playersListHook) {
@@ -227,8 +228,10 @@ class BattleRoyaleGame {
             const dyM = this.mouseY - me.y;
             me.angle = Math.atan2(dyM, dxM);
 
-            // --- 2. Envoi Réseau (Optimisation) ---
-            if ((dx !== 0 || dy !== 0 || true) && window.updatePlayerPosition) {
+            // --- 2. Envoi Réseau (Throttled à 50ms) ---
+            const now = Date.now();
+            if (now - this.lastNetworkUpdate > 50 && window.updatePlayerPosition) {
+                this.lastNetworkUpdate = now;
                 window.updatePlayerPosition(this.gameCode, this.myId, {
                     x: me.x,
                     y: me.y,
@@ -382,28 +385,15 @@ class BattleRoyaleGame {
         const hudWidth = 280;
         const hudHeight = 130;
 
-        // Fond glassmorphism
+        // Fond simple (optimisé)
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(hudX, hudY, hudWidth, hudHeight);
+
+        // Bordure simple
+        ctx.strokeStyle = '#FFD700';
         ctx.lineWidth = 2;
-
-        // Rounded rectangle
-        this.roundRect(ctx, hudX, hudY, hudWidth, hudHeight, 15);
-        ctx.fill();
-        ctx.stroke();
-
-        // Bordure brillante en haut
-        const gradient = ctx.createLinearGradient(hudX, hudY, hudX + hudWidth, hudY);
-        gradient.addColorStop(0, 'rgba(255,215,0,0.8)');
-        gradient.addColorStop(0.5, 'rgba(255,255,255,0.9)');
-        gradient.addColorStop(1, 'rgba(255,215,0,0.8)');
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(hudX + 15, hudY);
-        ctx.lineTo(hudX + hudWidth - 15, hudY);
-        ctx.stroke();
+        ctx.strokeRect(hudX, hudY, hudWidth, hudHeight);
 
         // === Contenu ===
         ctx.textAlign = 'left';
@@ -425,19 +415,14 @@ class BattleRoyaleGame {
         this.roundRect(ctx, hpBarX, hpBarY, hpBarWidth, hpBarHeight, 5);
         ctx.fill();
 
-        // PV actuel (gradient vert -> jaune -> rouge)
+        // PV actuel (couleur simple)
         const hpPercent = hp / 100;
         let hpColor;
         if (hpPercent > 0.6) hpColor = '#4CAF50';
         else if (hpPercent > 0.3) hpColor = '#FFC107';
         else hpColor = '#f44336';
-
-        const hpGradient = ctx.createLinearGradient(hpBarX, hpBarY, hpBarX + hpBarWidth * hpPercent, hpBarY);
-        hpGradient.addColorStop(0, hpColor);
-        hpGradient.addColorStop(1, hpColor + 'aa');
-        ctx.fillStyle = hpGradient;
-        this.roundRect(ctx, hpBarX, hpBarY, hpBarWidth * hpPercent, hpBarHeight, 5);
-        ctx.fill();
+        ctx.fillStyle = hpColor;
+        ctx.fillRect(hpBarX, hpBarY, hpBarWidth * hpPercent, hpBarHeight);
 
         // Icône coeur + texte HP
         ctx.font = 'bold 14px Arial';
