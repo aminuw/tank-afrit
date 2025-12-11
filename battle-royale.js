@@ -144,8 +144,22 @@ class BattleRoyaleGame {
                                 this.fixMySpawnPosition();
                             }
                         } else {
-                            // C'est un autre : J'écrase tout (c'est le serveur qui dit où il est)
-                            this.players[id] = state.players[id];
+                            // C'est un autre joueur : INTERPOLATION (pas d'écrasement direct)
+                            if (!this.players[id]) {
+                                // Nouveau joueur : créer avec position initiale
+                                this.players[id] = { ...state.players[id] };
+                                this.players[id].targetX = state.players[id].x;
+                                this.players[id].targetY = state.players[id].y;
+                                this.players[id].targetAngle = state.players[id].angle || 0;
+                            } else {
+                                // Joueur existant : mettre à jour la TARGET, pas la position
+                                this.players[id].targetX = state.players[id].x;
+                                this.players[id].targetY = state.players[id].y;
+                                this.players[id].targetAngle = state.players[id].angle || 0;
+                                this.players[id].hp = state.players[id].hp;
+                                this.players[id].name = state.players[id].name;
+                                this.players[id].skin = state.players[id].skin;
+                            }
                         }
                     });
 
@@ -239,6 +253,28 @@ class BattleRoyaleGame {
                 });
             }
         }
+
+        // --- INTERPOLATION DES JOUEURS DISTANTS ---
+        const LERP_FACTOR = 0.2; // 0.1 = lent/fluide, 0.3 = rapide/réactif
+        Object.keys(this.players).forEach(id => {
+            if (id === this.myId) return; // Pas moi
+            const p = this.players[id];
+
+            // Interpolation position
+            if (p.targetX !== undefined && p.x !== undefined) {
+                p.x += (p.targetX - p.x) * LERP_FACTOR;
+                p.y += (p.targetY - p.y) * LERP_FACTOR;
+            }
+
+            // Interpolation angle
+            if (p.targetAngle !== undefined) {
+                let diff = p.targetAngle - (p.angle || 0);
+                // Gérer le wrap autour de PI/-PI
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                p.angle = (p.angle || 0) + diff * LERP_FACTOR;
+            }
+        });
 
         // --- 3. Update Balles & Collisions ---
         for (let i = this.bullets.length - 1; i >= 0; i--) {
