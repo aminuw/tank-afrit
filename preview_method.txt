@@ -1,0 +1,48 @@
+    renderTankPreview(ctx, canvas) {
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const centerX = canvas.width / 2, centerY = canvas.height / 2, size = 40, turretLength = 50;
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-size/2+4, -size/2+4, size, size);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-size/2-2, -size/2, size+4, 8);
+        ctx.fillRect(-size/2-2, size/2-8, size+4, 8);
+        const g = ctx.createLinearGradient(-size/2, -size/2, size/2, size/2);
+        g.addColorStop(0, this.playerSkin.color);
+        g.addColorStop(1, this.playerSkin.color2);
+        ctx.fillStyle = g;
+        ctx.fillRect(-size/2, -size/2, size, size);
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-size/2, -size/2, size, size);
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(-size/2+3, -size/2+3, size-6, size/3);
+        ctx.restore();
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        const tg = ctx.createLinearGradient(0, -4, 0, 4);
+        tg.addColorStop(0, '#666'); tg.addColorStop(0.5, '#888'); tg.addColorStop(1, '#555');
+        ctx.fillStyle = tg;
+        ctx.fillRect(size/4, -4, turretLength-size/4, 8);
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(turretLength, 0, 5, 0, Math.PI*2); ctx.fill();
+        const bg = ctx.createRadialGradient(0, 0, 0, 0, 0, size/3);
+        bg.addColorStop(0, '#777'); bg.addColorStop(1, '#444');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(0, 0, size/3, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.restore();
+        
+        ctx.font = 'bold 16px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(this.playerName, centerX, centerY-size-10);
+        ctx.fillStyle = '#FFF';
+        ctx.fillText(this.playerName, centerX, centerY-size-10);
+    }

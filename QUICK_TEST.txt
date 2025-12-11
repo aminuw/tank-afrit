@@ -1,0 +1,68 @@
+🎮 GUIDE DE TEST RAPIDE
+=======================
+
+## 🎄 LOBBY DE NOËL
+
+1. Ouvrir index.html
+2. Observer le lobby :
+   ✅ Flocons de neige tombent
+   ✅ Lumières clignotent en haut
+   ✅ Sapins se balancent aux coins
+   ✅ Cadeaux rebondissent sous les sapins
+   ✅ Menu est scrollable avec molette
+
+## 🕹️ MOUVEMENT OMNIDIRECTIONNEL
+
+1. Lancer le jeu
+2. Tester les mouvements :
+
+   W/Z → HAUT (absolu)
+   S → BAS (absolu)
+   A/Q → GAUCHE (absolu)
+   D → DROITE (absolu)
+
+3. Vérifier :
+   ✅ Tank bouge IMMÉDIATEMENT dans la direction
+   ✅ Pas besoin de tourner d'abord
+   ✅ Mouvement diagonal fluide
+   ✅ Tank tourne automatiquement vers la direction
+   ✅ Souris vise indépendamment
+
+4. Tester combinaisons :
+   W+D → Diagonale haut-droite ✅
+   S+A → Diagonale bas-gauche ✅
+   Bouger + viser ailleurs → Fonctionne ✅
+
+## 🎯 COMPARAISON
+
+### AVANT
+- Appuyer sur D → Tank TOURNE à droite
+- Appuyer sur W → Tank AVANCE dans sa direction
+- Pour aller à droite : D (tourner) + W (avancer)
+
+### APRÈS
+- Appuyer sur D → Tank VA à droite IMMÉDIATEMENT
+- Appuyer sur W → Tank VA en haut IMMÉDIATEMENT
+- Pour aller à droite : D (c'est tout!)
+
+## ✅ CHECKLIST
+
+[ ] Lobby a des décorations de Noël
+[ ] Flocons tombent et tournent
+[ ] Lumières clignotent
+[ ] Sapins se balancent
+[ ] Cadeaux rebondissent
+[ ] Menu scrollable
+[ ] W/Z va en haut
+[ ] S va en bas
+[ ] A/Q va à gauche
+[ ] D va à droite
+[ ] Diagonales fonctionnent
+[ ] Tank tourne automatiquement
+[ ] Souris vise indépendamment
+[ ] Jeu fluide (60 FPS)
+
+## 🎉 RÉSULTAT
+
+Si tout est ✅, le jeu est PARFAIT !
+Votre public va ADORER ! 🎮🎄

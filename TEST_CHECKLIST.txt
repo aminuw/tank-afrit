@@ -1,0 +1,95 @@
+🎄 TANK BRAWLER - ÉDITION NOËL 🎄
+=================================
+
+CHECKLIST DE TEST
+-----------------
+
+[ ] 1. INTERFACE
+    [ ] Écran de login s'affiche
+    [ ] 5 maps sont visibles (Noël, Désert, Hiver, Forêt, Lave)
+    [ ] Map Noël est sélectionnée par défaut
+    [ ] Cliquer sur une map la sélectionne
+    [ ] Thème Noël est actif (rouge/vert)
+    [ ] Flocons de neige tombent
+
+[ ] 2. DÉMARRAGE DU JEU
+    [ ] Bouton "COMMENCER" fonctionne
+    [ ] Overlay disparaît
+    [ ] Notification "VAGUE 1" s'affiche
+    [ ] Fond thématique s'affiche (selon map choisie)
+    [ ] Grille colorée visible
+    [ ] Décors apparaissent (emojis)
+    [ ] Particules animées visibles
+
+[ ] 3. GAMEPLAY DE BASE
+    [ ] Tank joueur apparaît au centre
+    [ ] Contrôles fonctionnent :
+        [ ] Z/W/↑ : Avancer
+        [ ] S/↓ : Reculer
+        [ ] Q/A : Strafe gauche
+        [ ] D : Strafe droite
+        [ ] ←/→ : Rotation
+    [ ] Souris vise la tourelle
+    [ ] Clic/Espace tire
+    [ ] Ennemis apparaissent progressivement
+
+[ ] 4. BOSS
+    [ ] Boss apparaît après les ennemis
+    [ ] Message "👑 BOSS APPARAÎT! 👑" s'affiche
+    [ ] Boss a une couronne 👑 au-dessus
+    [ ] Boss a un glow violet pulsant
+    [ ] Boss tire en triple-shot
+    [ ] Boss se déplace intelligemment
+    [ ] À ~50% HP, boss devient rouge
+    [ ] Boss tire plus vite en mode rage
+    [ ] Défaite du boss :
+        [ ] Explosion massive
+        [ ] Slow-motion
+        [ ] Message "BOSS VAINCU! +XXX"
+        [ ] +200 XP reçu
+        [ ] Vague se termine
+
+[ ] 5. SYSTÈME DE MAPS
+    [ ] Changer de map dans le menu
+    [ ] Redémarrer le jeu
+    [ ] Vérifier que :
+        [ ] Fond change de couleur
+        [ ] Grille change de couleur
+        [ ] Décors sont différents
+        [ ] Particules sont différentes
+
+[ ] 6. THÈME NOËL (si map Noël sélectionnée)
+    [ ] Couleurs rouge/vert partout
+    [ ] Flocons de neige tombent
+    [ ] Décors de Noël (🎄🎁⭐❄️)
+    [ ] Effets de glow festifs
+    [ ] Boutons animés
+
+[ ] 7. PERFORMANCE
+    [ ] Jeu fluide (60 FPS)
+    [ ] Pas de lag avec boss + ennemis
+    [ ] Particules ne ralentissent pas
+    [ ] Décors ne causent pas de problèmes
+
+BUGS CONNUS À VÉRIFIER
+-----------------------
+
+[ ] Boss peut sortir de l'écran ?
+[ ] Particules s'accumulent ?
+[ ] Décors bloquent le mouvement ?
+[ ] Thème Noël ne s'applique pas ?
+[ ] Boss ne spawn pas ?
+[ ] Vague ne se termine pas ?
+
+RÉSULTATS
+---------
+
+✅ = Fonctionne parfaitement
+⚠️ = Fonctionne avec bugs mineurs
+❌ = Ne fonctionne pas
+
+Notes :
+_______________________________________
+_______________________________________
+_______________________________________
+_______________________________________
