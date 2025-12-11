@@ -1390,12 +1390,32 @@ class Game {
     spawnEnemy() {
         if (this.enemies.length >= CONFIG.MAX_ENEMIES || this.enemiesThisWave <= 0) return;
 
+        // Marge de sécurité pour garantir que les ennemis restent dans la map
+        const margin = 80; // Marge suffisante pour un tank de taille 32px
         const edge = Math.floor(Math.random() * 4);
         let x, y;
-        if (edge === 0) { x = 50 + Math.random() * (this.canvas.width - 100); y = 50; }
-        else if (edge === 1) { x = this.canvas.width - 50; y = 50 + Math.random() * (this.canvas.height - 100); }
-        else if (edge === 2) { x = 50 + Math.random() * (this.canvas.width - 100); y = this.canvas.height - 50; }
-        else { x = 50; y = 50 + Math.random() * (this.canvas.height - 100); }
+
+        // Spawn sur les bords MAIS toujours dans les limites de la map
+        if (edge === 0) {
+            // Haut
+            x = margin + Math.random() * (this.canvas.width - margin * 2);
+            y = margin;
+        }
+        else if (edge === 1) {
+            // Droite
+            x = this.canvas.width - margin;
+            y = margin + Math.random() * (this.canvas.height - margin * 2);
+        }
+        else if (edge === 2) {
+            // Bas
+            x = margin + Math.random() * (this.canvas.width - margin * 2);
+            y = this.canvas.height - margin;
+        }
+        else {
+            // Gauche
+            x = margin;
+            y = margin + Math.random() * (this.canvas.height - margin * 2);
+        }
 
         const e = new EnemyTank(`e_${Date.now()}`, x, y, this.wave);
         e.angle = Math.random() * 360; e.turretAngle = e.angle;
@@ -1408,6 +1428,43 @@ class Game {
 
         this.enemies.push(e);
         this.enemiesThisWave--;
+    }
+
+    checkCageCollision(tank) {
+        if (!this.bossCage) return;
+
+        const cage = this.bossCage;
+        const cageLeft = cage.x - cage.size / 2;
+        const cageRight = cage.x + cage.size / 2;
+        const cageTop = cage.y - cage.size / 2;
+        const cageBottom = cage.y + cage.size / 2;
+
+        const tankRadius = tank.size / 2;
+
+        // Vérifier si le tank entre en collision avec la cage
+        // Collision avec les côtés de la cage
+        if (tank.x + tankRadius > cageLeft && tank.x - tankRadius < cageRight &&
+            tank.y + tankRadius > cageTop && tank.y - tankRadius < cageBottom) {
+
+            // Repousser le tank hors de la cage
+            const overlapLeft = (tank.x + tankRadius) - cageLeft;
+            const overlapRight = cageRight - (tank.x - tankRadius);
+            const overlapTop = (tank.y + tankRadius) - cageTop;
+            const overlapBottom = cageBottom - (tank.y - tankRadius);
+
+            // Trouver le côté avec le moins de chevauchement et repousser de ce côté
+            const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+            if (minOverlap === overlapLeft) {
+                tank.x = cageLeft - tankRadius;
+            } else if (minOverlap === overlapRight) {
+                tank.x = cageRight + tankRadius;
+            } else if (minOverlap === overlapTop) {
+                tank.y = cageTop - tankRadius;
+            } else if (minOverlap === overlapBottom) {
+                tank.y = cageBottom + tankRadius;
+            }
+        }
     }
 
     addShake(intensity) { this.screenShake.intensity = Math.max(this.screenShake.intensity, intensity); }
@@ -1478,6 +1535,11 @@ class Game {
         if (this.player.isAlive) {
             this.player.turretAngle = Math.atan2(this.mouse.y - this.player.y, this.mouse.x - this.player.x) * 180 / Math.PI;
             this.player.update(dt, this.canvas.width, this.canvas.height, t);
+
+            // Vérifier collision avec la cage du boss
+            if (this.bossCage) {
+                this.checkCageCollision(this.player);
+            }
 
             if (this.mouse.down || this.keys['Space']) {
                 const b = this.player.fire(t);
