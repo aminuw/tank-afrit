@@ -120,8 +120,5 @@ window.launchGameSignal = function () {
     socket.emit('startGame');
 };
 
-// Stub
-window.initFirebase = function () { return true; };
-window.generatePlayerId = () => socket.id;
 window.playersListHook = () => gameState.players;
 window.getMapHook = () => gameState.map;

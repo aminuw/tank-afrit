@@ -189,6 +189,7 @@ function startGameLoop(code) {
 }
 
 function joinGameLocally(socket, code, name, skin, isHost) {
+    socket.data.gameCode = code; // Stockage direct pour accès rapide
     socket.join(code);
 
     // SPAWN ALEATOIRE (Carte 2000x2000)
@@ -232,11 +233,8 @@ function generateMap() {
 }
 
 function getPlayerRoom(socket) {
-    // Array.from car socket.rooms est un Set
-    for (const room of Array.from(socket.rooms)) {
-        if (games[room]) return room;
-    }
-    return null;
+    // Accès direct via socket.data (plus robuste)
+    return socket.data.gameCode || null;
 }
 
 const PORT = process.env.PORT || 3000;
