@@ -2417,6 +2417,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+
+        // Ecouter les parties publiques
+        const gamesContainer = document.getElementById('games-container');
+        if (gamesContainer && typeof listenToPublicGames === 'function') {
+            listenToPublicGames((games) => {
+                gamesContainer.innerHTML = '';
+
+                if (games.length === 0) {
+                    gamesContainer.innerHTML = '<div class="no-games">Aucune partie disponible...</div>';
+                    return;
+                }
+
+                games.forEach(game => {
+                    const gameEl = document.createElement('div');
+                    gameEl.className = 'game-item';
+                    gameEl.innerHTML = `
+                        <div class="game-info">
+                            <span class="host-name">${game.host}</span>
+                            <span class="player-count">${game.playerCount}/${game.maxPlayers} joueurs</span>
+                        </div>
+                        <button class="join-btn" data-code="${game.code}">REJOINDRE</button>
+                    `;
+
+                    gameEl.querySelector('.join-btn').addEventListener('click', () => {
+                        const codeInput = document.getElementById('game-code-input');
+                        if (codeInput) {
+                            codeInput.value = game.code;
+                            // Simuler click rejoindre
+                            const joinBtn = document.getElementById('join-game-btn');
+                            if (joinBtn) joinBtn.click();
+                        }
+                    });
+
+                    gamesContainer.appendChild(gameEl);
+                });
+            });
+        }
     }
 
     // ========== NAVIGATION ==========
@@ -2496,7 +2533,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (createGameBtn) {
         createGameBtn.addEventListener('click', async () => {
             try {
-                const result = await createGame(brSettings.playerName, brSettings.playerSkin);
+                // Creer une partie publique par defaut
+                const result = await createGame(brSettings.playerName, brSettings.playerSkin, true);
                 if (result) {
                     console.log('Partie créée ! Code: ' + result.gameCode);
                     brLobby.classList.add('hidden');

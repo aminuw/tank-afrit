@@ -1,42 +1,231 @@
 ﻿/**
- * BATTLE ROYALE MODE - OPTIMIZED
- * Mode multijoueur avec zone qui retrecit et buissons caches
- * Version optimisee pour reduire le lag
+ * BATTLE ROYALE MODE - ANTI-ROLLBACK EDITION
+ * Systeme de prediction et interpolation avance
  */
 
-// Configuration Battle Royale
 const BR_CONFIG = {
     MAP_WIDTH: 2400,
     MAP_HEIGHT: 1600,
     CAMERA_WIDTH: 1200,
     CAMERA_HEIGHT: 800,
 
-    // Zone
     INITIAL_ZONE_RADIUS: 1200,
     ZONE_PHASES: [
-        { duration: 30, targetRadius: 960 },   // Phase 1: 80%
-        { duration: 30, targetRadius: 720 },   // Phase 2: 60%
-        { duration: 30, targetRadius: 480 },   // Phase 3: 40%
-        { duration: 30, targetRadius: 240 }    // Phase 4: 20%
+        { duration: 30, targetRadius: 960 },
+        { duration: 30, targetRadius: 720 },
+        { duration: 30, targetRadius: 480 },
+        { duration: 30, targetRadius: 240 }
     ],
-    ZONE_DAMAGE: 5, // HP/seconde hors zone
+    ZONE_DAMAGE: 5,
 
-    // Obstacles
     BUSH_COUNT: 18,
     ROCK_COUNT: 12,
     TREE_COUNT: 10,
 
-    // Gameplay - OPTIMISE pour moins de lag
     REVEAL_DURATION: 2000,
-    SYNC_INTERVAL: 150, // ms - Reduit a 6-7 fois/seconde au lieu de 20
-    ZONE_SYNC_INTERVAL: 2000, // Sync zone toutes les 2 secondes
-    INTERPOLATION_SPEED: 10, // Vitesse d'interpolation
+    SYNC_INTERVAL: 150,
+    ZONE_SYNC_INTERVAL: 2000,
+
+    // Anti-rollback settings
+    INTERPOLATION_SPEED: 8,      // Vitesse de rattrapage
+    EXTRAPOLATION_TIME: 0.3,     // Secondes de prediction max
+    POSITION_BUFFER_SIZE: 3,     // Nombre de positions a moyenner
+    MAX_TELEPORT_DISTANCE: 200,  // Distance max avant teleport force
+
     MAX_PLAYERS: 10,
     MIN_PLAYERS_TO_START: 2,
     COUNTDOWN_DURATION: 5
 };
 
-// Classe pour les obstacles de la map
+// Notification d'elimination visible par tous
+class KillNotification {
+    constructor(killerName, victimName) {
+        this.killerName = killerName;
+        this.victimName = victimName;
+        this.life = 3; // 3 secondes
+        this.y = 100;
+        this.alpha = 0;
+        this.scale = 0.5;
+    }
+
+    update(dt) {
+        this.life -= dt;
+        // Animation d'entree
+        if (this.life > 2.5) {
+            this.alpha = Math.min(1, this.alpha + dt * 4);
+            this.scale = Math.min(1, this.scale + dt * 4);
+        }
+        // Animation de sortie
+        else if (this.life < 0.5) {
+            this.alpha = this.life * 2;
+        }
+    }
+
+    draw(ctx, canvasWidth) {
+        if (this.life <= 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.translate(canvasWidth / 2, this.y);
+        ctx.scale(this.scale, this.scale);
+
+        // Fond
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(-200, -20, 400, 40);
+        ctx.strokeStyle = '#FF4444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-200, -20, 400, 40);
+
+        // Texte
+        ctx.font = 'bold 18px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FF6666';
+        ctx.fillText(this.killerName, -60, 6);
+        ctx.fillStyle = '#FFF';
+        ctx.fillText(' a elimine ', 0, 6);
+        ctx.fillStyle = '#AAAAAA';
+        ctx.fillText(this.victimName, 80, 6);
+
+        // Icone skull
+        ctx.font = '24px Arial';
+        ctx.fillText('💀', -130, 8);
+
+        ctx.restore();
+    }
+
+    get isAlive() { return this.life > 0; }
+}
+
+// Confetti pour victoire
+class Confetti {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 400;
+        this.vy = -200 - Math.random() * 300;
+        this.rotation = Math.random() * 360;
+        this.rotSpeed = (Math.random() - 0.5) * 720;
+        this.size = 5 + Math.random() * 10;
+        this.color = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FF69B4'][Math.floor(Math.random() * 6)];
+        this.life = 3 + Math.random() * 2;
+    }
+
+    update(dt) {
+        this.vy += 300 * dt; // Gravite
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.rotation += this.rotSpeed * dt;
+        this.life -= dt;
+    }
+
+    draw(ctx) {
+        if (this.life <= 0) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation * Math.PI / 180);
+        ctx.globalAlpha = Math.min(1, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.size / 2, -this.size / 4, this.size, this.size / 2);
+        ctx.restore();
+    }
+
+    get isAlive() { return this.life > 0; }
+}
+
+// Animation de victoire
+class VictoryAnimation {
+    constructor(canvasWidth, canvasHeight, winnerName) {
+        this.canvasWidth = canvasWidth;
+        this.canvasHeight = canvasHeight;
+        this.winnerName = winnerName;
+        this.time = 0;
+        this.confettis = [];
+        this.textScale = 0;
+        this.textAlpha = 0;
+        this.active = true;
+
+        // Generer confettis
+        for (let i = 0; i < 100; i++) {
+            setTimeout(() => {
+                if (this.active) {
+                    this.confettis.push(new Confetti(
+                        Math.random() * canvasWidth,
+                        canvasHeight + 50
+                    ));
+                }
+            }, i * 30);
+        }
+    }
+
+    update(dt) {
+        this.time += dt;
+
+        // Animation du texte
+        if (this.time < 1) {
+            this.textScale = Math.min(1.2, this.textScale + dt * 3);
+            this.textAlpha = Math.min(1, this.textAlpha + dt * 2);
+        } else if (this.time < 1.5) {
+            this.textScale = 1.2 - (this.time - 1) * 0.4; // Bounce back
+        } else {
+            this.textScale = 1;
+        }
+
+        // Update confettis
+        this.confettis.forEach(c => c.update(dt));
+        this.confettis = this.confettis.filter(c => c.isAlive);
+    }
+
+    draw(ctx) {
+        // Fond sombre
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
+
+        // Confettis
+        this.confettis.forEach(c => c.draw(ctx));
+
+        // Couronne animee
+        ctx.save();
+        ctx.translate(this.canvasWidth / 2, this.canvasHeight / 2 - 100);
+        ctx.scale(this.textScale, this.textScale);
+        ctx.globalAlpha = this.textAlpha;
+        ctx.font = '80px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('👑', 0, 0);
+        ctx.restore();
+
+        // Texte VICTOIRE ROYALE
+        ctx.save();
+        ctx.translate(this.canvasWidth / 2, this.canvasHeight / 2);
+        ctx.scale(this.textScale, this.textScale);
+        ctx.globalAlpha = this.textAlpha;
+
+        // Glow effect
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 30;
+        ctx.font = 'bold 56px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FFD700';
+        ctx.fillText('VICTOIRE ROYALE!', 0, 0);
+        ctx.shadowBlur = 0;
+
+        // Nom du gagnant
+        ctx.font = 'bold 32px Rajdhani';
+        ctx.fillStyle = '#FFF';
+        ctx.fillText(this.winnerName, 0, 50);
+
+        ctx.restore();
+
+        // Instructions
+        ctx.globalAlpha = 0.5 + Math.sin(this.time * 3) * 0.5;
+        ctx.font = '20px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FFF';
+        ctx.fillText('Cliquez pour retourner au lobby', this.canvasWidth / 2, this.canvasHeight - 50);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// Classe obstacle
 class MapObstacle {
     constructor(x, y, type, size) {
         this.x = x;
@@ -58,27 +247,98 @@ class MapObstacle {
         ctx.save();
 
         if (this.type === 'bush') {
-            ctx.fillStyle = 'rgba(34, 139, 34, 0.7)';
+            // Ombre
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(screenX + 3, screenY + 5, this.size / 2.2, this.size / 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Couches de feuillage
+            const bushGrad = ctx.createRadialGradient(screenX - 5, screenY - 5, 0, screenX, screenY, this.size / 2);
+            bushGrad.addColorStop(0, '#5dd55d');
+            bushGrad.addColorStop(0.5, '#228B22');
+            bushGrad.addColorStop(1, '#145214');
+            ctx.fillStyle = bushGrad;
             ctx.beginPath();
             ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
+
+            // Petits cercles pour texture feuilles
+            ctx.fillStyle = 'rgba(100, 200, 100, 0.6)';
+            for (let i = 0; i < 5; i++) {
+                const ox = (Math.random() - 0.5) * this.size * 0.6;
+                const oy = (Math.random() - 0.5) * this.size * 0.6;
+                ctx.beginPath();
+                ctx.arc(screenX + ox, screenY + oy, 5 + Math.random() * 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.strokeStyle = 'rgba(0, 80, 0, 0.5)';
             ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
             ctx.stroke();
+
         } else if (this.type === 'rock') {
-            ctx.fillStyle = '#666';
+            // Ombre
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath();
+            ctx.ellipse(screenX + 4, screenY + 6, this.size / 2, this.size / 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Corps avec dégradé 3D
+            const rockGrad = ctx.createRadialGradient(screenX - 8, screenY - 8, 0, screenX, screenY, this.size / 2);
+            rockGrad.addColorStop(0, '#9a9a9a');
+            rockGrad.addColorStop(0.5, '#666');
+            rockGrad.addColorStop(1, '#333');
+            ctx.fillStyle = rockGrad;
             ctx.beginPath();
             ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = '#444';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        } else if (this.type === 'tree') {
-            ctx.fillStyle = '#4a2f0a';
-            ctx.fillRect(screenX - 5, screenY, 10, 20);
-            ctx.fillStyle = '#228B22';
+
+            // Reflet
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
             ctx.beginPath();
-            ctx.arc(screenX, screenY - 10, this.size / 2.5, 0, Math.PI * 2);
+            ctx.ellipse(screenX - 5, screenY - 5, this.size / 5, this.size / 6, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
+            ctx.stroke();
+
+        } else if (this.type === 'tree') {
+            // Ombre au sol
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(screenX + 5, screenY + 15, this.size / 2.5, this.size / 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tronc avec dégradé
+            const trunkGrad = ctx.createLinearGradient(screenX - 6, screenY, screenX + 6, screenY);
+            trunkGrad.addColorStop(0, '#2d1a06');
+            trunkGrad.addColorStop(0.5, '#5c3d1e');
+            trunkGrad.addColorStop(1, '#3d2610');
+            ctx.fillStyle = trunkGrad;
+            ctx.fillRect(screenX - 6, screenY - 5, 12, 25);
+
+            // Feuillage avec plusieurs couches
+            const leafGrad = ctx.createRadialGradient(screenX - 5, screenY - 20, 0, screenX, screenY - 10, this.size / 2);
+            leafGrad.addColorStop(0, '#4ade4a');
+            leafGrad.addColorStop(0.6, '#228B22');
+            leafGrad.addColorStop(1, '#0d4d0d');
+            ctx.fillStyle = leafGrad;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY - 15, this.size / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Petites feuilles
+            ctx.fillStyle = 'rgba(80, 200, 80, 0.5)';
+            ctx.beginPath();
+            ctx.arc(screenX - 10, screenY - 20, 8, 0, Math.PI * 2);
+            ctx.arc(screenX + 12, screenY - 18, 7, 0, Math.PI * 2);
+            ctx.arc(screenX, screenY - 28, 6, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -100,7 +360,7 @@ class MapObstacle {
     }
 }
 
-// Classe pour la zone
+// Zone
 class ShrinkingZone {
     constructor() {
         this.centerX = BR_CONFIG.MAP_WIDTH / 2;
@@ -171,7 +431,7 @@ class ShrinkingZone {
     }
 }
 
-// Classe joueur distant avec interpolation
+// Joueur distant avec ANTI-ROLLBACK
 class RemotePlayer {
     constructor(id, name, skin) {
         this.id = id;
@@ -179,17 +439,29 @@ class RemotePlayer {
         this.color = skin?.color || '#FF0000';
         this.color2 = skin?.color2 || '#AA0000';
 
-        // Position actuelle (affichee)
+        // Position affichee (interpolee)
         this.x = 0;
         this.y = 0;
         this.angle = 0;
         this.turretAngle = 0;
 
-        // Position cible (recue de Firebase)
-        this.targetX = 0;
-        this.targetY = 0;
-        this.targetAngle = 0;
-        this.targetTurretAngle = 0;
+        // Position cible du serveur
+        this.serverX = 0;
+        this.serverY = 0;
+        this.serverAngle = 0;
+        this.serverTurretAngle = 0;
+
+        // Velocite calculee pour prediction
+        this.velocityX = 0;
+        this.velocityY = 0;
+        this.angularVelocity = 0;
+
+        // Buffer de positions pour lissage
+        this.positionBuffer = [];
+
+        // Timestamps
+        this.lastServerUpdate = 0;
+        this.lastUpdateTimestamp = 0;
 
         this.health = 100;
         this.maxHealth = 100;
@@ -198,68 +470,145 @@ class RemotePlayer {
         this.size = 35;
         this.turretLength = 45;
 
-        this.lastUpdate = Date.now();
+        this.initialized = false;
     }
 
-    // Interpolation douce vers la position cible
-    interpolate(dt) {
+    // Recevoir une mise a jour du serveur
+    updateFromServer(data) {
+        const now = Date.now();
+
+        // Ignorer les donnees plus anciennes que la derniere update
+        if (this.lastUpdateTimestamp > 0 && data.lastUpdate && data.lastUpdate < this.lastUpdateTimestamp) {
+            return; // Ignorer cette update obsolete
+        }
+
+        if (data.lastUpdate) {
+            this.lastUpdateTimestamp = data.lastUpdate;
+        }
+
+        const newX = data.x !== undefined ? data.x : this.serverX;
+        const newY = data.y !== undefined ? data.y : this.serverY;
+        const newAngle = data.angle !== undefined ? data.angle : this.serverAngle;
+        const newTurretAngle = data.turretAngle !== undefined ? data.turretAngle : this.serverTurretAngle;
+
+        // Calculer la velocite si on a une position precedente
+        if (this.lastServerUpdate > 0 && this.initialized) {
+            const timeDelta = (now - this.lastServerUpdate) / 1000;
+            if (timeDelta > 0 && timeDelta < 1) {
+                this.velocityX = (newX - this.serverX) / timeDelta;
+                this.velocityY = (newY - this.serverY) / timeDelta;
+
+                let angleDiff = newAngle - this.serverAngle;
+                while (angleDiff > 180) angleDiff -= 360;
+                while (angleDiff < -180) angleDiff += 360;
+                this.angularVelocity = angleDiff / timeDelta;
+            }
+        }
+
+        this.serverX = newX;
+        this.serverY = newY;
+        this.serverAngle = newAngle;
+        this.serverTurretAngle = newTurretAngle;
+
+        // Ajouter au buffer
+        this.positionBuffer.push({ x: newX, y: newY, angle: newAngle, time: now });
+        while (this.positionBuffer.length > BR_CONFIG.POSITION_BUFFER_SIZE) {
+            this.positionBuffer.shift();
+        }
+
+        this.lastServerUpdate = now;
+
+        // Premiere initialisation - teleporter directement
+        if (!this.initialized && newX !== 0 && newY !== 0) {
+            this.x = newX;
+            this.y = newY;
+            this.angle = newAngle;
+            this.turretAngle = newTurretAngle;
+            this.initialized = true;
+        }
+
+        // Si trop loin, teleporter (anti-cheat ou deconnexion)
+        const dist = Math.sqrt((this.x - newX) ** 2 + (this.y - newY) ** 2);
+        if (dist > BR_CONFIG.MAX_TELEPORT_DISTANCE) {
+            this.x = newX;
+            this.y = newY;
+            this.velocityX = 0;
+            this.velocityY = 0;
+        }
+
+        // Mettre a jour les autres proprietes
+        if (data.health !== undefined) this.health = data.health;
+        this.isAlive = data.alive !== false;
+        this.hidden = data.hidden || false;
+    }
+
+    // Mise a jour chaque frame avec prediction
+    update(dt) {
+        if (!this.initialized) return;
+
+        const now = Date.now();
+        const timeSinceUpdate = (now - this.lastServerUpdate) / 1000;
+
+        // Calculer la position cible avec prediction
+        let targetX = this.serverX;
+        let targetY = this.serverY;
+        let targetAngle = this.serverAngle;
+
+        // Extrapolation : predire ou sera le joueur
+        if (timeSinceUpdate < BR_CONFIG.EXTRAPOLATION_TIME) {
+            targetX += this.velocityX * timeSinceUpdate * 0.5; // 50% de prediction
+            targetY += this.velocityY * timeSinceUpdate * 0.5;
+            targetAngle += this.angularVelocity * timeSinceUpdate * 0.3;
+        }
+
+        // Moyenner avec le buffer si disponible
+        if (this.positionBuffer.length >= 2) {
+            let avgX = 0, avgY = 0;
+            this.positionBuffer.forEach(p => {
+                avgX += p.x;
+                avgY += p.y;
+            });
+            avgX /= this.positionBuffer.length;
+            avgY /= this.positionBuffer.length;
+
+            // Blend entre la prediction et la moyenne
+            targetX = targetX * 0.7 + avgX * 0.3;
+            targetY = targetY * 0.7 + avgY * 0.3;
+        }
+
+        // Interpolation vers la cible
         const speed = BR_CONFIG.INTERPOLATION_SPEED;
+        this.x += (targetX - this.x) * speed * dt;
+        this.y += (targetY - this.y) * speed * dt;
 
-        // Interpoler position
-        this.x += (this.targetX - this.x) * speed * dt;
-        this.y += (this.targetY - this.y) * speed * dt;
-
-        // Interpoler angles (avec gestion du wraparound)
-        let angleDiff = this.targetAngle - this.angle;
+        // Interpoler les angles
+        let angleDiff = targetAngle - this.angle;
         while (angleDiff > 180) angleDiff -= 360;
         while (angleDiff < -180) angleDiff += 360;
         this.angle += angleDiff * speed * dt;
 
-        let turretDiff = this.targetTurretAngle - this.turretAngle;
+        let turretDiff = this.serverTurretAngle - this.turretAngle;
         while (turretDiff > 180) turretDiff -= 360;
         while (turretDiff < -180) turretDiff += 360;
-        this.turretAngle += turretDiff * speed * dt;
-    }
-
-    // Mettre a jour depuis Firebase
-    updateFromServer(data) {
-        if (data.x !== undefined) this.targetX = data.x;
-        if (data.y !== undefined) this.targetY = data.y;
-        if (data.angle !== undefined) this.targetAngle = data.angle;
-        if (data.turretAngle !== undefined) this.targetTurretAngle = data.turretAngle;
-        if (data.health !== undefined) this.health = data.health;
-        this.isAlive = data.alive !== false;
-        this.hidden = data.hidden || false;
-        this.lastUpdate = Date.now();
-
-        // Si premiere mise a jour, teleporter directement
-        if (this.x === 0 && this.y === 0) {
-            this.x = this.targetX;
-            this.y = this.targetY;
-            this.angle = this.targetAngle;
-            this.turretAngle = this.targetTurretAngle;
-        }
+        this.turretAngle += turretDiff * speed * 1.5 * dt; // Tourelle plus reactive
     }
 
     draw(ctx) {
         ctx.save();
         ctx.rotate(this.angle * Math.PI / 180);
 
-        // Corps
         const gradient = ctx.createLinearGradient(-this.size / 2, -this.size / 2, this.size / 2, this.size / 2);
         gradient.addColorStop(0, this.color);
         gradient.addColorStop(1, this.color2);
         ctx.fillStyle = gradient;
         ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
 
-        // Chenilles
         ctx.fillStyle = '#333';
         ctx.fillRect(-this.size / 2 - 2, -this.size / 2, this.size + 4, 8);
         ctx.fillRect(-this.size / 2 - 2, this.size / 2 - 8, this.size + 4, 8);
 
         ctx.restore();
 
-        // Tourelle
         ctx.save();
         ctx.rotate(this.turretAngle * Math.PI / 180);
         ctx.fillStyle = '#666';
@@ -283,7 +632,7 @@ class RemotePlayer {
     }
 }
 
-// Classe principale Battle Royale
+// Jeu principal
 class BattleRoyaleGame {
     constructor(canvas, playerName, playerSkin, gameCode, isHost) {
         this.canvas = canvas;
@@ -303,7 +652,7 @@ class BattleRoyaleGame {
 
         this.localPlayer = null;
         this.localPlayerId = currentPlayerId;
-        this.players = new Map(); // RemotePlayer instances
+        this.players = new Map();
 
         this.obstacles = [];
         this.mapLoaded = false;
@@ -315,6 +664,10 @@ class BattleRoyaleGame {
         this.explosions = [];
         this.bulletCounter = 0;
 
+        // Nouvelles animations
+        this.killNotifications = [];
+        this.victoryAnim = null;
+
         this.keys = {};
         this.mouse = { x: 0, y: 0, down: false };
 
@@ -322,8 +675,6 @@ class BattleRoyaleGame {
         this.lastZoneSyncTime = 0;
         this.revealedUntil = 0;
         this.myRank = 0;
-
-        // Throttle pour eviter trop de mises a jour
         this.pendingSync = false;
 
         this.init();
@@ -373,18 +724,16 @@ class BattleRoyaleGame {
     }
 
     async syncMapToFirebase() {
-        const mapData = {
-            obstacles: this.obstacles.map(o => ({
-                x: Math.round(o.x),
-                y: Math.round(o.y),
-                type: o.type,
-                size: o.size
-            })),
-            generated: true
-        };
-
         try {
-            await currentGameRef.child('map').set(mapData);
+            await currentGameRef.child('map').set({
+                obstacles: this.obstacles.map(o => ({
+                    x: Math.round(o.x),
+                    y: Math.round(o.y),
+                    type: o.type,
+                    size: o.size
+                })),
+                generated: true
+            });
         } catch (error) {
             console.error('Error syncing map:', error);
         }
@@ -397,7 +746,6 @@ class BattleRoyaleGame {
                 return;
             }
 
-            // Etat
             if (gameData.status && gameData.status !== this.state) {
                 this.state = gameData.status;
                 if (this.state === 'countdown') {
@@ -405,12 +753,47 @@ class BattleRoyaleGame {
                 }
             }
 
-            // Joueurs
             if (gameData.players) {
                 const serverPlayerIds = Object.keys(gameData.players);
 
                 serverPlayerIds.forEach(playerId => {
                     const playerData = gameData.players[playerId];
+
+                    // Detection de mort pour notification
+                    let oldAliveState = true;
+                    if (playerId === this.localPlayerId) {
+                        if (this.localPlayer) oldAliveState = this.localPlayer.isAlive;
+                    } else if (this.players.has(playerId)) {
+                        oldAliveState = this.players.get(playerId).isAlive;
+                    }
+
+                    const newAliveState = playerData.alive !== false;
+
+                    // Si le joueur vient de mourir
+                    if (oldAliveState && !newAliveState) {
+                        const victimName = playerData.name;
+                        let killerName = "Zone"; // Par defaut
+
+                        if (playerData.killedBy) {
+                            if (playerData.killedBy === this.localPlayerId) {
+                                killerName = this.localPlayer ? this.localPlayer.name : "Vous";
+                            } else if (gameData.players[playerData.killedBy]) {
+                                killerName = gameData.players[playerData.killedBy].name;
+                            }
+                        }
+
+                        // Ajouter notification
+                        if (this.killNotifications) {
+                            this.killNotifications.push(new KillNotification(killerName, victimName));
+                        }
+
+                        // Effet sonore ou visuel supplementaire ici si besoin
+                        const pX = playerData.x || 0;
+                        const pY = playerData.y || 0;
+                        if (this.explosions) {
+                            this.explosions.push(new Explosion(pX, pY, 50, true)); // Explosion de mort (plus grosse, rouge)
+                        }
+                    }
 
                     if (playerId === this.localPlayerId) {
                         if (!this.localPlayer) {
@@ -421,7 +804,6 @@ class BattleRoyaleGame {
                     }
                 });
 
-                // Supprimer joueurs partis
                 this.players.forEach((player, playerId) => {
                     if (!serverPlayerIds.includes(playerId)) {
                         this.players.delete(playerId);
@@ -433,7 +815,6 @@ class BattleRoyaleGame {
                 }
             }
 
-            // Map
             if (!this.isHost && gameData.map && gameData.map.generated && !this.mapLoaded) {
                 this.obstacles = gameData.map.obstacles.map(o =>
                     new MapObstacle(o.x, o.y, o.type, o.size)
@@ -441,7 +822,6 @@ class BattleRoyaleGame {
                 this.mapLoaded = true;
             }
 
-            // Zone (non-hote seulement)
             if (!this.isHost && gameData.zone) {
                 this.zone.centerX = gameData.zone.centerX || BR_CONFIG.MAP_WIDTH / 2;
                 this.zone.centerY = gameData.zone.centerY || BR_CONFIG.MAP_HEIGHT / 2;
@@ -585,7 +965,6 @@ class BattleRoyaleGame {
             if (this.state === 'finished') {
                 this.returnToLobby();
             } else {
-                // Check bouton quitter
                 const rect = this.canvas.getBoundingClientRect();
                 const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
                 const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
@@ -614,8 +993,8 @@ class BattleRoyaleGame {
             this.updateCountdown(dt);
         }
 
-        // Toujours interpoler les joueurs distants
-        this.players.forEach(player => player.interpolate(dt));
+        // Mettre a jour tous les joueurs distants (prediction + interpolation)
+        this.players.forEach(player => player.update(dt));
 
         this.render();
         requestAnimationFrame(this.loop.bind(this));
@@ -634,7 +1013,6 @@ class BattleRoyaleGame {
 
         this.gameTime += dt;
 
-        // Input
         this.localPlayer.inputs.forward = this.keys['KeyZ'] || this.keys['KeyW'] || this.keys['ArrowUp'];
         this.localPlayer.inputs.backward = this.keys['KeyS'] || this.keys['ArrowDown'];
         this.localPlayer.inputs.strafeLeft = this.keys['KeyQ'] || this.keys['KeyA'];
@@ -642,7 +1020,6 @@ class BattleRoyaleGame {
         this.localPlayer.inputs.left = this.keys['ArrowLeft'];
         this.localPlayer.inputs.right = this.keys['ArrowRight'];
 
-        // Viser
         const worldMouseX = this.mouse.x + this.cameraX;
         const worldMouseY = this.mouse.y + this.cameraY;
         this.localPlayer.turretAngle = Math.atan2(
@@ -650,14 +1027,10 @@ class BattleRoyaleGame {
             worldMouseX - this.localPlayer.x
         ) * 180 / Math.PI;
 
-        // Update local
         this.localPlayer.update(dt, BR_CONFIG.MAP_WIDTH, BR_CONFIG.MAP_HEIGHT, t);
-
-        // Collisions obstacles
         this.checkObstacleCollisions();
         this.checkBushHiding();
 
-        // Tir
         if (this.mouse.down || this.keys['Space']) {
             const bullet = this.localPlayer.fire(t);
             if (bullet) {
@@ -671,10 +1044,8 @@ class BattleRoyaleGame {
             }
         }
 
-        // Update balles
         this.updateBullets(dt);
 
-        // Zone (hote seulement)
         if (this.isHost) {
             this.zone.update(dt);
 
@@ -684,7 +1055,6 @@ class BattleRoyaleGame {
             }
         }
 
-        // Degats zone
         if (this.zone.isOutside(this.localPlayer.x, this.localPlayer.y)) {
             this.localPlayer.takeDamage(BR_CONFIG.ZONE_DAMAGE * dt);
             if (!this.localPlayer.isAlive) {
@@ -692,20 +1062,25 @@ class BattleRoyaleGame {
             }
         }
 
-        // Sync position (throttled)
         if (t - this.lastSyncTime > BR_CONFIG.SYNC_INTERVAL) {
             this.syncPlayerPosition();
             this.lastSyncTime = t;
         }
 
-        // Camera
         this.updateCamera();
 
-        // Effets
         this.explosions = this.explosions.filter(e => {
             e.update(dt);
             return e.isAlive;
         });
+
+        // Update notifications
+        if (this.killNotifications) {
+            this.killNotifications = this.killNotifications.filter(n => {
+                n.update(dt);
+                return n.isAlive;
+            });
+        }
     }
 
     updateBullets(dt) {
@@ -713,7 +1088,6 @@ class BattleRoyaleGame {
             const bullet = this.bullets[i];
             bullet.update(dt, BR_CONFIG.MAP_WIDTH, BR_CONFIG.MAP_HEIGHT);
 
-            // Collision avec joueurs distants
             if (bullet.ownerId === this.localPlayerId) {
                 this.players.forEach((player, playerId) => {
                     if (bullet.isAlive && player.isAlive) {
@@ -807,11 +1181,9 @@ class BattleRoyaleGame {
     render() {
         const ctx = this.ctx;
 
-        // Fond
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Grille
         ctx.strokeStyle = 'rgba(100, 255, 100, 0.05)';
         ctx.lineWidth = 1;
         const gridSize = 50;
@@ -832,13 +1204,9 @@ class BattleRoyaleGame {
         }
 
         if (this.state === 'playing' || this.state === 'countdown') {
-            // Zone
             this.zone.draw(ctx, this.cameraX, this.cameraY);
-
-            // Obstacles
             this.obstacles.forEach(o => o.draw(ctx, this.cameraX, this.cameraY));
 
-            // Balles
             this.bullets.forEach(bullet => {
                 const sx = bullet.x - this.cameraX;
                 const sy = bullet.y - this.cameraY;
@@ -850,19 +1218,16 @@ class BattleRoyaleGame {
                 }
             });
 
-            // Joueurs distants
             this.players.forEach(player => {
                 if (player.isAlive && !player.hidden) {
                     this.drawPlayer(ctx, player);
                 }
             });
 
-            // Joueur local
             if (this.localPlayer && this.localPlayer.isAlive) {
                 this.drawPlayer(ctx, this.localPlayer, true);
             }
 
-            // Explosions
             this.explosions.forEach(e => {
                 ctx.save();
                 ctx.translate(e.x - this.cameraX, e.y - this.cameraY);
@@ -870,8 +1235,15 @@ class BattleRoyaleGame {
                 ctx.restore();
             });
 
-            // HUD
             this.drawHUD(ctx);
+
+            // Notifications de kills
+            if (this.killNotifications) {
+                this.killNotifications.forEach((n, index) => {
+                    n.y = 100 + index * 50; // Pile les notifications
+                    n.draw(ctx, this.canvas.width);
+                });
+            }
 
             if (this.state === 'countdown') {
                 this.drawCountdown(ctx);
@@ -899,7 +1271,6 @@ class BattleRoyaleGame {
             ctx.globalAlpha = 0.3;
         }
 
-        // Dessiner
         if (typeof player.drawLocal === 'function') {
             player.drawLocal(ctx);
         } else if (typeof player.draw === 'function') {
@@ -908,7 +1279,6 @@ class BattleRoyaleGame {
 
         ctx.restore();
 
-        // Nom
         ctx.save();
         ctx.font = 'bold 12px Rajdhani';
         ctx.textAlign = 'center';
@@ -987,7 +1357,6 @@ class BattleRoyaleGame {
         ctx.fillText((this.players.size + 1) + '/' + BR_CONFIG.MAX_PLAYERS + ' joueurs',
             this.canvas.width / 2, this.canvas.height / 2 + 40);
 
-        // Bouton quitter
         ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
         ctx.fillRect(this.canvas.width - 150, 10, 140, 30);
         ctx.font = 'bold 14px Rajdhani';
@@ -1009,21 +1378,31 @@ class BattleRoyaleGame {
     }
 
     drawFinished(ctx) {
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        // Initialsier l'animation de victoire si necessaire
+        if (this.myRank === 1 && !this.victoryAnim) {
+            this.victoryAnim = new VictoryAnimation(this.canvas.width, this.canvas.height, this.localPlayer ? this.localPlayer.name : "Vous");
+        }
+
+        if (this.victoryAnim) {
+            this.victoryAnim.update(0.016); // Approx dt
+            this.victoryAnim.draw(ctx);
+            return;
+        }
+
+        // Ecran de fin standard si pas victoire
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         ctx.textAlign = 'center';
 
-        if (this.myRank === 1) {
-            ctx.fillStyle = '#FFD700';
-            ctx.font = 'bold 48px Orbitron';
-            ctx.fillText('VICTOIRE ROYALE !', this.canvas.width / 2, this.canvas.height / 2 - 50);
-        } else if (this.winner) {
+        if (this.winner) {
             ctx.fillStyle = '#FFF';
-            ctx.font = 'bold 36px Orbitron';
-            ctx.fillText('Gagnant: ' + this.winner, this.canvas.width / 2, this.canvas.height / 2 - 50);
+            ctx.font = 'bold 48px Orbitron';
+            ctx.fillText('WINNER: ' + this.winner, this.canvas.width / 2, this.canvas.height / 2 - 60);
+
             if (this.myRank > 0) {
-                ctx.font = 'bold 24px Rajdhani';
+                ctx.font = 'bold 36px Rajdhani';
+                ctx.fillStyle = this.myRank <= 3 ? '#FFD700' : '#AAA';
                 ctx.fillText('Votre classement: #' + this.myRank, this.canvas.width / 2, this.canvas.height / 2);
             }
         } else {
@@ -1032,8 +1411,11 @@ class BattleRoyaleGame {
             ctx.fillText('Partie terminee', this.canvas.width / 2, this.canvas.height / 2 - 50);
         }
 
-        ctx.font = '24px Rajdhani';
+        // Bouton retour en surbrillance
+        ctx.fillStyle = '#FF4444';
+        ctx.fillRect(this.canvas.width / 2 - 120, this.canvas.height / 2 + 60, 240, 50);
+        ctx.font = 'bold 24px Rajdhani';
         ctx.fillStyle = '#FFF';
-        ctx.fillText('Cliquez pour retourner au lobby', this.canvas.width / 2, this.canvas.height / 2 + 80);
+        ctx.fillText('RETOURNER AU LOBBY', this.canvas.width / 2, this.canvas.height / 2 + 92);
     }
 }

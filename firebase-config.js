@@ -59,7 +59,8 @@ function generateGameCode() {
 }
 
 // CrÃ©er une nouvelle partie
-async function createGame(hostName, hostSkin) {
+// CrÃ©er une nouvelle partie
+async function createGame(hostName, hostSkin, isPublic = true) {
     const gameCode = generateGameCode();
     const playerId = generatePlayerId();
     currentPlayerId = playerId;
@@ -67,6 +68,7 @@ async function createGame(hostName, hostSkin) {
     const gameData = {
         code: gameCode,
         status: 'waiting', // waiting, countdown, playing, finished
+        isPublic: isPublic,
         host: playerId,
         createdAt: firebase.database.ServerValue.TIMESTAMP,
         maxPlayers: 10,
@@ -328,6 +330,34 @@ async function getActiveGames() {
     }
 }
 
+// Ecouter les parties publiques en temps reel
+function listenToPublicGames(callback) {
+    if (!database) return;
+
+    const gamesRef = database.ref('games');
+    const query = gamesRef.orderByChild('status').equalTo('waiting');
+
+    query.on('value', (snapshot) => {
+        const games = [];
+        snapshot.forEach((childSnapshot) => {
+            const gameData = childSnapshot.val();
+            // Filtrer les parties privees si le flag existe
+            if (gameData.isPublic !== false) {
+                const playerCount = Object.keys(gameData.players || {}).length;
+                games.push({
+                    code: gameData.code,
+                    playerCount: playerCount,
+                    maxPlayers: gameData.maxPlayers,
+                    host: (gameData.players && gameData.players[gameData.host]) ? gameData.players[gameData.host].name : 'Inconnu'
+                });
+            }
+        });
+        callback(games);
+    });
+
+    return () => query.off();
+}
+
 // Nettoyer les anciennes parties (Ã  appeler pÃ©riodiquement)
 async function cleanupOldGames() {
     try {
@@ -343,7 +373,7 @@ async function cleanupOldGames() {
             }
         });
     } catch (error) {
-        console.error('âŒ Error cleaning up games:', error);
+        console.error('â Œ Error cleaning up games:', error);
     }
 }
 
@@ -364,6 +394,7 @@ if (typeof module !== 'undefined' && module.exports) {
         sendHit,
         setPlayerDead,
         getActiveGames,
+        listenToPublicGames,
         cleanupOldGames
     };
 }
