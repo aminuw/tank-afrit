@@ -35,8 +35,71 @@
             </div>
         </header>
 
-        <!-- Login Overlay -->
-        <div id="login-overlay" class="login-overlay">
+        <!-- Mode Selection Overlay -->
+        <div id="mode-selection-overlay" class="login-overlay">
+            <!-- Christmas Decorations -->
+            <div class="christmas-decorations">
+                <div class="snow-container">
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                </div>
+                <div class="christmas-lights">
+                    <span class="light red"></span>
+                    <span class="light green"></span>
+                    <span class="light blue"></span>
+                    <span class="light yellow"></span>
+                    <span class="light red"></span>
+                    <span class="light green"></span>
+                    <span class="light blue"></span>
+                    <span class="light yellow"></span>
+                </div>
+                <div class="christmas-tree left">🎄</div>
+                <div class="christmas-tree right">🎄</div>
+                <div class="presents left">🎁</div>
+                <div class="presents right">🎁</div>
+            </div>
+
+            <div class="mode-selection-card">
+                <h2>🎮 CHOISISSEZ VOTRE MODE</h2>
+
+                <div class="mode-grid">
+                    <!-- Mode Solo -->
+                    <div class="mode-option" id="mode-solo">
+                        <div class="mode-icon">🎯</div>
+                        <div class="mode-title">SOLO</div>
+                        <div class="mode-description">
+                            Combattez contre des vagues d'ennemis<br>
+                            Boss épiques • Système de progression<br>
+                            5 maps thématiques
+                        </div>
+                        <div class="mode-badge">✨ Mode Original</div>
+                    </div>
+
+                    <!-- Mode Battle Royale -->
+                    <div class="mode-option" id="mode-battle-royale">
+                        <div class="mode-icon">🌐</div>
+                        <div class="mode-title">BATTLE ROYALE</div>
+                        <div class="mode-description">
+                            Affrontez d'autres joueurs en ligne<br>
+                            Zone qui rétrécit • Buissons cachés<br>
+                            Dernier survivant gagne
+                        </div>
+                        <div class="mode-badge online">🔥 Mode Online</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Solo Lobby Overlay -->
+        <div id="solo-lobby-overlay" class="login-overlay hidden">
             <!-- Christmas Decorations -->
             <div class="christmas-decorations">
                 <div class="snow-container">
@@ -68,7 +131,8 @@
             </div>
 
             <div class="login-card">
-                <h2>🎮 Rejoindre le Combat</h2>
+                <button class="btn-back" id="back-from-solo">← Retour</button>
+                <h2>🎯 Mode Solo</h2>
                 <div class="input-group">
                     <label for="player-name">Nom du Joueur</label>
                     <input type="text" id="player-name" placeholder="Entrez votre nom..." maxlength="12" value="Joueur">
@@ -138,7 +202,85 @@
                     </div>
                 </div>
 
-                <button id="start-game-btn" class="btn-start">COMMENCER</button>
+                <button id="start-solo-btn" class="btn-start">COMMENCER</button>
+            </div>
+        </div>
+
+        <!-- Battle Royale Lobby Overlay -->
+        <div id="br-lobby-overlay" class="login-overlay hidden">
+            <!-- Christmas Decorations -->
+            <div class="christmas-decorations">
+                <div class="snow-container">
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                    <div class="snowflake">❅</div>
+                    <div class="snowflake">❆</div>
+                    <div class="snowflake">❄</div>
+                </div>
+                <div class="christmas-lights">
+                    <span class="light red"></span>
+                    <span class="light green"></span>
+                    <span class="light blue"></span>
+                    <span class="light yellow"></span>
+                    <span class="light red"></span>
+                    <span class="light green"></span>
+                    <span class="light blue"></span>
+                    <span class="light yellow"></span>
+                </div>
+                <div class="christmas-tree left">🎄</div>
+                <div class="christmas-tree right">🎄</div>
+                <div class="presents left">🎁</div>
+                <div class="presents right">🎁</div>
+            </div>
+
+            <div class="login-card">
+                <button class="btn-back" id="back-from-br">← Retour</button>
+                <h2>🌐 Battle Royale</h2>
+
+                <div class="input-group">
+                    <label for="br-player-name">Nom du Joueur</label>
+                    <input type="text" id="br-player-name" placeholder="Entrez votre nom..." maxlength="12"
+                        value="Joueur">
+                </div>
+
+                <div class="skin-selection">
+                    <label>Choisissez votre Skin</label>
+                    <div class="skins-grid" id="br-skins-grid">
+                        <div class="skin-option selected" data-color="#2196F3" data-color2="#1565C0"></div>
+                        <div class="skin-option" data-color="#4CAF50" data-color2="#388E3C"></div>
+                        <div class="skin-option" data-color="#FFC107" data-color2="#FFA000"></div>
+                        <div class="skin-option" data-color="#E91E63" data-color2="#C2185B"></div>
+                        <div class="skin-option" data-color="#9C27B0" data-color2="#7B1FA2"></div>
+                        <div class="skin-option" data-color="#00BCD4" data-color2="#0097A7"></div>
+                    </div>
+                </div>
+
+                <div class="preview-section">
+                    <label>Aperçu de votre Tank</label>
+                    <canvas id="br-tank-preview" width="300" height="200"></canvas>
+                </div>
+
+                <div class="br-actions">
+                    <button id="create-game-btn" class="btn-primary">🎮 CRÉER UNE PARTIE</button>
+                    <div class="or-divider">- OU -</div>
+                    <div class="join-game-section">
+                        <input type="text" id="game-code-input" placeholder="Code de partie (ex: A7B2)" maxlength="4"
+                            style="text-transform: uppercase;">
+                        <button id="join-game-btn" class="btn-secondary">🚀 REJOINDRE</button>
+                    </div>
+                </div>
+
+                <div id="active-games-list" class="active-games-list">
+                    <label>🌐 Parties Publiques</label>
+                    <div id="games-container" class="games-container">
+                        <div class="no-games">Aucune partie disponible...</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -179,6 +321,15 @@
         </footer>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- Firebase Config & Battle Royale -->
+    <script src="firebase-config.js"></script>
+    <script src="battle-royale.js"></script>
+
+    <!-- Game Script -->
     <script src="game.js"></script>
 </body>
 

@@ -2127,3 +2127,153 @@ class Game {
 }
 
 window.addEventListener('DOMContentLoaded', () => new Game());
+// ---------------------------------------------------------------------------
+// NAVIGATION ENTRE LES MODES
+// ---------------------------------------------------------------------------
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modeSelection = document.getElementById('mode-selection-overlay');
+    const soloLobby = document.getElementById('solo-lobby-overlay');
+    const brLobby = document.getElementById('br-lobby-overlay');
+    
+    const modeSolo = document.getElementById('mode-solo');
+    const modeBR = document.getElementById('mode-battle-royale');
+    
+    const backFromSolo = document.getElementById('back-from-solo');
+    const backFromBR = document.getElementById('back-from-br');
+    
+    // Cliquer sur Solo
+    if (modeSolo) {
+        modeSolo.addEventListener('click', () => {
+            modeSelection.classList.add('hidden');
+            soloLobby.classList.remove('hidden');
+        });
+    }
+    
+    // Cliquer sur Battle Royale
+    if (modeBR) {
+        modeBR.addEventListener('click', () => {
+            modeSelection.classList.add('hidden');
+            brLobby.classList.remove('hidden');
+            
+            // Initialiser Firebase
+            if (typeof initFirebase === 'function') {
+                if (!initFirebase()) {
+                    alert('Erreur: Firebase n est pas configuré correctement.');
+                    brLobby.classList.add('hidden');
+                    modeSelection.classList.remove('hidden');
+                }
+            } else {
+                alert('Erreur: Firebase SDK non chargé. Vérifiez index.html');
+                brLobby.classList.add('hidden');
+                modeSelection.classList.remove('hidden');
+            }
+        });
+    }
+    
+    // Retour depuis Solo
+    if (backFromSolo) {
+        backFromSolo.addEventListener('click', () => {
+            soloLobby.classList.add('hidden');
+            modeSelection.classList.remove('hidden');
+        });
+    }
+    
+    // Retour depuis BR
+    if (backFromBR) {
+        backFromBR.addEventListener('click', () => {
+            brLobby.classList.add('hidden');
+            modeSelection.classList.remove('hidden');
+        });
+    }
+    
+    // Démarrer Solo
+    const startSoloBtn = document.getElementById('start-solo-btn');
+    if (startSoloBtn) {
+        startSoloBtn.addEventListener('click', () => {
+            const playerName = document.getElementById('player-name').value.trim() || 'Joueur';
+            soloLobby.classList.add('hidden');
+            
+            setTimeout(() => {
+                const game = new Game(document.getElementById('gameCanvas'));
+                game.playerName = playerName;
+                game.startWave(1);
+            }, 100);
+        });
+    }
+    
+    // Créer partie BR
+    const createGameBtn = document.getElementById('create-game-btn');
+    if (createGameBtn) {
+        createGameBtn.addEventListener('click', async () => {
+            const playerName = document.getElementById('br-player-name').value.trim() || 'Joueur';
+            
+            const selectedSkin = document.querySelector('#br-skins-grid .skin-option.selected');
+            const playerSkin = {
+                color: selectedSkin?.dataset.color || '#2196F3',
+                color2: selectedSkin?.dataset.color2 || '#1565C0'
+            };
+            
+            try {
+                const result = await createGame(playerName, playerSkin);
+                if (result) {
+                    console.log('Partie créée ! Code: ' + result.gameCode);
+                    brLobby.classList.add('hidden');
+                    new BattleRoyaleGame(
+                        document.getElementById('gameCanvas'),
+                        playerName,
+                        playerSkin,
+                        result.gameCode,
+                        true
+                    );
+                }
+            } catch (error) {
+                alert('Erreur lors de la création: ' + error.message);
+            }
+        });
+    }
+    
+    // Rejoindre partie BR
+    const joinGameBtn = document.getElementById('join-game-btn');
+    if (joinGameBtn) {
+        joinGameBtn.addEventListener('click', async () => {
+            const gameCode = document.getElementById('game-code-input').value.trim().toUpperCase();
+            const playerName = document.getElementById('br-player-name').value.trim() || 'Joueur';
+            
+            if (!gameCode || gameCode.length !== 4) {
+                alert('Veuillez entrer un code de partie valide (4 caractères)');
+                return;
+            }
+            
+            const selectedSkin = document.querySelector('#br-skins-grid .skin-option.selected');
+            const playerSkin = {
+                color: selectedSkin?.dataset.color || '#2196F3',
+                color2: selectedSkin?.dataset.color2 || '#1565C0'
+            };
+            
+            try {
+                const result = await joinGame(gameCode, playerName, playerSkin);
+                console.log('Partie rejointe ! Code: ' + result.gameCode);
+                brLobby.classList.add('hidden');
+                new BattleRoyaleGame(
+                    document.getElementById('gameCanvas'),
+                    playerName,
+                    playerSkin,
+                    result.gameCode,
+                    false
+                );
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+    }
+    
+    // Sélection de skin pour BR
+    const brSkins = document.querySelectorAll('#br-skins-grid .skin-option');
+    brSkins.forEach(skin => {
+        skin.addEventListener('click', () => {
+            brSkins.forEach(s => s.classList.remove('selected'));
+            skin.classList.add('selected');
+        });
+    });
+});
