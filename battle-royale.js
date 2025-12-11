@@ -73,14 +73,36 @@ class BattleRoyaleGame {
             window.listenToGame((state) => {
                 // Mise à jour des joueurs (positions, vie...)
                 if (state.players) {
-                    this.players = state.players;
+                    // CLIENT PREDICTION : On ne met à jour QUE les autres joueurs.
+                    // On garde notre position locale courante pour éviter le "rollback/lag".
+                    // Sauf pour les infos critiques non-locales comme les HP ou si on n'existe pas encore.
+
+                    Object.keys(state.players).forEach(id => {
+                        if (id === this.myId) {
+                            // C'est moi : Je mets à jour mes HP et mon Skin, mais PAS X/Y/Angle
+                            // car je suis l'autorité sur mon mouvement (c'est fluide chez moi).
+                            if (this.players[this.myId]) {
+                                this.players[this.myId].hp = state.players[id].hp;
+                                this.players[this.myId].skin = state.players[id].skin;
+                            } else {
+                                // Première fois que je me vois : j'accepte tout
+                                this.players[this.myId] = state.players[id];
+                            }
+                        } else {
+                            // C'est un autre : J'écrase tout (c'est le serveur qui dit où il est)
+                            this.players[id] = state.players[id];
+                        }
+                    });
+
+                    // Nettoyage des déconnectés
+                    Object.keys(this.players).forEach(id => {
+                        if (!state.players[id]) delete this.players[id];
+                    });
                 }
 
                 // Mise à jour des balles (nouvelles balles reçues)
                 if (state.bullets) {
                     Object.values(state.bullets).forEach(b => {
-                        // On ajoute seulement si on ne la connait pas déjà (simple id check ou juste push)
-                        // Pour faire simple ici on push tout ce qui arrive comme "fire event"
                         this.bullets.push(b);
                     });
                 }
