@@ -2467,22 +2467,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Cliquer sur Battle Royale
+    // Cliquer sur Battle Royale
     if (modeBR) {
         modeBR.addEventListener('click', () => {
             modeSelection.classList.add('hidden');
             brLobby.classList.remove('hidden');
 
-            // Initialiser Firebase
+            // Initialisation silencieuse du réseau (si disponible)
             if (typeof initFirebase === 'function') {
-                if (!initFirebase()) {
-                    alert('Erreur: Firebase n\'est pas configuré correctement.');
-                    brLobby.classList.add('hidden');
-                    modeSelection.classList.remove('hidden');
-                }
-            } else {
-                alert('Erreur: Firebase SDK non chargé. Vérifiez index.html');
-                brLobby.classList.add('hidden');
-                modeSelection.classList.remove('hidden');
+                initFirebase();
             }
         });
     }
