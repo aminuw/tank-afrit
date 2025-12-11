@@ -552,6 +552,91 @@ class Tank {
         this.drawHealthBar(ctx);
     }
 
+    // Méthode pour dessiner à l'origine (0,0) - utilisée par Battle Royale avec caméra
+    drawLocal(ctx) {
+        if (!this.isAlive) return;
+
+        ctx.save();
+        ctx.rotate(this.angle * Math.PI / 180);
+
+        // Ombre
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size, this.size);
+
+        // Chenilles
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-this.size / 2 - 2, -this.size / 2, this.size + 4, 8);
+        ctx.fillRect(-this.size / 2 - 2, this.size / 2 - 8, this.size + 4, 8);
+
+        // Corps
+        let c1 = this.color, c2 = this.color2;
+        if (this.hitFlash > 0) {
+            const f = Math.sin(this.hitFlash * Math.PI);
+            c1 = this.lerpColor(this.color, '#FF0000', f);
+            c2 = this.lerpColor(this.color2, '#CC0000', f);
+        }
+        if (this.isDashing) {
+            c1 = '#00FFFF'; c2 = '#0088FF';
+        }
+
+        const g = ctx.createLinearGradient(-this.size / 2, -this.size / 2, this.size / 2, this.size / 2);
+        g.addColorStop(0, c1); g.addColorStop(1, c2);
+        ctx.fillStyle = g;
+        this.roundRect(ctx, -this.size / 2, -this.size / 2, this.size, this.size, 5);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+        this.roundRect(ctx, -this.size / 2, -this.size / 2, this.size, this.size, 5);
+        ctx.stroke();
+
+        // Reflet
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        this.roundRect(ctx, -this.size / 2 + 3, -this.size / 2 + 3, this.size - 6, this.size / 3, 3);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Tourelle
+        ctx.save();
+        ctx.rotate(this.turretAngle * Math.PI / 180);
+
+        const cg = ctx.createLinearGradient(0, -4, 0, 4);
+        cg.addColorStop(0, '#666'); cg.addColorStop(0.5, '#888'); cg.addColorStop(1, '#555');
+        ctx.fillStyle = cg;
+        ctx.fillRect(this.size / 4, -4, this.turretLength - this.size / 4, 8);
+
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(this.turretLength, 0, 5, 0, Math.PI * 2); ctx.fill();
+
+        const bg = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size / 3);
+        bg.addColorStop(0, '#777'); bg.addColorStop(1, '#444');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(0, 0, this.size / 3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+
+        ctx.restore();
+
+        // Barre de vie (locale)
+        this.drawHealthBarLocal(ctx);
+    }
+
+    // Barre de vie en position locale (0,0)
+    drawHealthBarLocal(ctx) {
+        const bw = this.size + 10, bh = 6;
+        const bx = -bw / 2, by = -this.size / 2 - 15;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+
+        const hp = this.health / this.maxHealth;
+        const hc = hp > 0.6 ? '#4CAF50' : hp > 0.3 ? '#FFC107' : '#F44336';
+        ctx.fillStyle = hc;
+        ctx.fillRect(bx, by, bw * hp, bh);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, bw, bh);
+    }
+
     drawHealthBar(ctx) {
         const bw = this.size + 10, bh = 6;
         const bx = this.x - bw / 2, by = this.y - this.size / 2 - 15;

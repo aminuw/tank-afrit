@@ -325,13 +325,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
-    <!-- Firebase Config & Battle Royale -->
+    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
+
+    <!-- Game Script (must load first - defines Tank, Explosion, etc. classes) -->
+    <script src="game.js"></script>
+
+    <!-- Battle Royale System (uses classes from game.js) -->
     <script src="waiting-room.js"></script>
     <script src="battle-royale.js"></script>
-
-    <!-- Game Script -->
-    <script src="game.js"></script>
 </body>
 
 </html>

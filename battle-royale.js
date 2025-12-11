@@ -1,6 +1,6 @@
 ﻿/**
  * BATTLE ROYALE MODE
- * Mode multijoueur avec zone qui ré©tré©cit et buissons caché©s
+ * Mode multijoueur avec zone qui retrecit et buissons caches
  */
 
 // Configuration Battle Royale
@@ -26,8 +26,8 @@ const BR_CONFIG = {
     TREE_COUNT: 10,
 
     // Gameplay
-    REVEAL_DURATION: 2000, // ms - Temps ré©vé©lé© apré¨s tir depuis buisson
-    SYNC_INTERVAL: 100, // ms - Fré©quence de synchronisation position
+    REVEAL_DURATION: 2000, // ms - Temps revele apres tir depuis buisson
+    SYNC_INTERVAL: 100, // ms - Frequence de synchronisation position
     MAX_PLAYERS: 10,
     MIN_PLAYERS_TO_START: 2,
     COUNTDOWN_DURATION: 5 // secondes
@@ -40,7 +40,6 @@ class MapObstacle {
         this.y = y;
         this.type = type; // 'bush', 'rock', 'tree'
         this.size = size;
-        this.emoji = type === 'bush' ? '¿' : type === 'rock' ? '' : '²';
         this.isSolid = type !== 'bush'; // Buissons = pas solide, autres = solide
     }
 
@@ -48,25 +47,48 @@ class MapObstacle {
         const screenX = this.x - cameraX;
         const screenY = this.y - cameraY;
 
-        // Ne dessiner que si visible é  l'é©cran
+        // Ne dessiner que si visible a l'ecran
         if (screenX < -this.size || screenX > BR_CONFIG.CAMERA_WIDTH + this.size ||
             screenY < -this.size || screenY > BR_CONFIG.CAMERA_HEIGHT + this.size) {
             return;
         }
 
         ctx.save();
-        ctx.font = `${this.size}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
 
-        // Ombre pour les obstacles solides
-        if (this.isSolid) {
+        // Dessiner selon le type
+        if (this.type === 'bush') {
+            // Buisson vert
+            ctx.fillStyle = 'rgba(34, 139, 34, 0.7)';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else if (this.type === 'rock') {
+            // Rocher gris
+            ctx.fillStyle = '#666';
             ctx.shadowColor = 'rgba(0,0,0,0.5)';
             ctx.shadowBlur = 10;
             ctx.shadowOffsetY = 5;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else if (this.type === 'tree') {
+            // Arbre
+            ctx.fillStyle = '#4a2f0a';
+            ctx.fillRect(screenX - 5, screenY, 10, 20);
+            ctx.fillStyle = '#228B22';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY - 10, this.size / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
         }
 
-        ctx.fillText(this.emoji, screenX, screenY);
         ctx.restore();
     }
 
@@ -91,7 +113,7 @@ class MapObstacle {
     }
 }
 
-// Classe pour la zone qui ré©tré©cit
+// Classe pour la zone qui retrecit
 class ShrinkingZone {
     constructor() {
         this.centerX = BR_CONFIG.MAP_WIDTH / 2;
@@ -110,7 +132,7 @@ class ShrinkingZone {
         const currentPhase = BR_CONFIG.ZONE_PHASES[this.phase];
 
         if (this.phaseTimer >= currentPhase.duration) {
-            // Passer é  la phase suivante
+            // Passer a la phase suivante
             this.phase++;
             this.phaseTimer = 0;
 
@@ -119,7 +141,7 @@ class ShrinkingZone {
                 this.shrinking = true;
             }
         } else if (this.shrinking) {
-            // Ré©tré©cir progressivement
+            // Retrecir progressivement
             const shrinkSpeed = (this.currentRadius - this.targetRadius) / (currentPhase.duration - this.phaseTimer);
             this.currentRadius -= shrinkSpeed * dt;
 
@@ -147,7 +169,7 @@ class ShrinkingZone {
         ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
         ctx.fillRect(0, 0, BR_CONFIG.CAMERA_WIDTH, BR_CONFIG.CAMERA_HEIGHT);
 
-        // Zone safe - dé©couper un cercle
+        // Zone safe - decouper un cercle
         ctx.globalCompositeOperation = 'destination-out';
         ctx.beginPath();
         ctx.arc(screenX, screenY, this.currentRadius, 0, Math.PI * 2);
@@ -187,7 +209,7 @@ class BattleRoyaleGame {
         this.canvas.width = BR_CONFIG.CAMERA_WIDTH;
         this.canvas.height = BR_CONFIG.CAMERA_HEIGHT;
 
-        // é‰tat du jeu
+        // Etat du jeu
         this.state = 'waiting'; // waiting, countdown, playing, finished
         this.countdownTimer = 0;
         this.gameTime = 0;
@@ -219,7 +241,7 @@ class BattleRoyaleGame {
         this.lastSyncTime = 0;
         this.syncInterval = BR_CONFIG.SYNC_INTERVAL;
 
-        // Ré©vé©lation depuis buisson
+        // Revelation depuis buisson
         this.revealedUntil = 0;
 
         // Classement
@@ -234,7 +256,7 @@ class BattleRoyaleGame {
         this.setupEvents();
         this.setupFirebaseListeners();
 
-        // Si hé´te, initialiser la map dans Firebase
+        // Si hote, initialiser la map dans Firebase
         if (this.isHost) {
             this.syncMapToFirebase();
         }
@@ -246,21 +268,21 @@ class BattleRoyaleGame {
     generateMap() {
         this.obstacles = [];
 
-        // Gé©né©rer buissons
+        // Generer buissons
         for (let i = 0; i < BR_CONFIG.BUSH_COUNT; i++) {
             const x = 200 + Math.random() * (BR_CONFIG.MAP_WIDTH - 400);
             const y = 200 + Math.random() * (BR_CONFIG.MAP_HEIGHT - 400);
             this.obstacles.push(new MapObstacle(x, y, 'bush', 60));
         }
 
-        // Gé©né©rer rochers
+        // Generer rochers
         for (let i = 0; i < BR_CONFIG.ROCK_COUNT; i++) {
             const x = 200 + Math.random() * (BR_CONFIG.MAP_WIDTH - 400);
             const y = 200 + Math.random() * (BR_CONFIG.MAP_HEIGHT - 400);
             this.obstacles.push(new MapObstacle(x, y, 'rock', 50));
         }
 
-        // Gé©né©rer arbres
+        // Generer arbres
         for (let i = 0; i < BR_CONFIG.TREE_COUNT; i++) {
             const x = 200 + Math.random() * (BR_CONFIG.MAP_WIDTH - 400);
             const y = 200 + Math.random() * (BR_CONFIG.MAP_HEIGHT - 400);
@@ -269,7 +291,7 @@ class BattleRoyaleGame {
     }
 
     async syncMapToFirebase() {
-        // Sauvegarder la map dans Firebase pour que tous aient la méªme
+        // Sauvegarder la map dans Firebase pour que tous aient la meme
         const mapData = {
             obstacles: this.obstacles.map(o => ({
                 x: o.x,
@@ -287,24 +309,24 @@ class BattleRoyaleGame {
     }
 
     setupFirebaseListeners() {
-        // é‰couter les changements de la partie
+        // Ecouter les changements de la partie
         listenToGame((gameData) => {
             if (!gameData) {
-                // Partie supprimé©e
+                // Partie supprimee
                 this.state = 'finished';
                 return;
             }
 
-            // Mettre é  jour l'é©tat
+            // Mettre a jour l'etat
             this.state = gameData.status;
 
-            // Mettre é  jour les joueurs
+            // Mettre a jour les joueurs
             if (gameData.players) {
                 Object.keys(gameData.players).forEach(playerId => {
                     const playerData = gameData.players[playerId];
 
                     if (playerId === this.localPlayerId) {
-                        // Joueur local - ne pas é©craser la position
+                        // Joueur local - ne pas ecraser la position
                         if (!this.localPlayer) {
                             this.createLocalPlayer(playerData);
                         }
@@ -314,7 +336,7 @@ class BattleRoyaleGame {
                     }
                 });
 
-                // Retirer les joueurs dé©connecté©s
+                // Retirer les joueurs deconnectes
                 this.players.forEach((player, playerId) => {
                     if (!gameData.players[playerId]) {
                         this.players.delete(playerId);
@@ -329,7 +351,7 @@ class BattleRoyaleGame {
                 );
             }
 
-            // Synchroniser la zone (si hé´te)
+            // Synchroniser la zone (si hote)
             if (this.isHost && gameData.status === 'playing') {
                 this.syncZoneToFirebase();
             }
@@ -345,7 +367,7 @@ class BattleRoyaleGame {
     }
 
     createLocalPlayer(playerData) {
-        // Cré©er le tank du joueur local
+        // Creer le tank du joueur local
         const spawnPos = this.getRandomSpawnPosition();
 
         this.localPlayer = new Tank(this.localPlayerId, spawnPos.x, spawnPos.y, {
@@ -361,7 +383,7 @@ class BattleRoyaleGame {
 
     updateRemotePlayer(playerId, playerData) {
         if (!this.players.has(playerId)) {
-            // Cré©er nouveau joueur
+            // Creer nouveau joueur
             const player = new Tank(playerId, playerData.x, playerData.y, {
                 name: playerData.name,
                 color: playerData.skin?.color || '#FF0000',
@@ -370,7 +392,7 @@ class BattleRoyaleGame {
             });
             this.players.set(playerId, player);
         } else {
-            // Mettre é  jour joueur existant
+            // Mettre a jour joueur existant
             const player = this.players.get(playerId);
             player.x = playerData.x;
             player.y = playerData.y;
@@ -383,7 +405,7 @@ class BattleRoyaleGame {
     }
 
     getRandomSpawnPosition() {
-        // Spawn alé©atoire loin du centre et des autres joueurs
+        // Spawn aleatoire loin du centre et des autres joueurs
         let x, y;
         let attempts = 0;
 
@@ -399,7 +421,7 @@ class BattleRoyaleGame {
     }
 
     isPositionBlocked(x, y) {
-        // Vé©rifier si la position est bloqué©e par un obstacle solide
+        // Verifier si la position est bloquee par un obstacle solide
         for (const obstacle of this.obstacles) {
             if (obstacle.isSolid) {
                 const dx = x - obstacle.x;
@@ -502,13 +524,13 @@ class BattleRoyaleGame {
             worldMouseX - this.localPlayer.x
         ) * 180 / Math.PI;
 
-        // Mettre é  jour le joueur
+        // Mettre a jour le joueur
         this.localPlayer.update(dt, BR_CONFIG.MAP_WIDTH, BR_CONFIG.MAP_HEIGHT, t);
 
-        // Vé©rifier collision avec obstacles
+        // Verifier collision avec obstacles
         this.checkObstacleCollisions();
 
-        // Vé©rifier si dans un buisson
+        // Verifier si dans un buisson
         this.checkBushHiding();
 
         // Tirer
@@ -516,21 +538,23 @@ class BattleRoyaleGame {
             const bullet = this.localPlayer.fire(t);
             if (bullet) {
                 this.bullets.push(bullet);
-                // Ré©vé©ler si dans un buisson
+                // Reveler si dans un buisson
                 if (this.localPlayer.hidden) {
                     this.revealedUntil = t + BR_CONFIG.REVEAL_DURATION;
                 }
-                // Envoyer le tir é  Firebase
-                sendBullet(bullet.id, bullet.x, bullet.y, bullet.angle, bullet.damage);
+                // Envoyer le tir a Firebase
+                if (typeof sendBullet === 'function') {
+                    sendBullet(bullet.id, bullet.x, bullet.y, bullet.angle, bullet.damage);
+                }
             }
         }
 
-        // Mettre é  jour la zone
+        // Mettre a jour la zone
         if (this.isHost) {
             this.zone.update(dt);
         }
 
-        // Dé©gé¢ts hors zone
+        // Degats hors zone
         if (this.zone.isOutside(this.localPlayer.x, this.localPlayer.y)) {
             this.localPlayer.takeDamage(BR_CONFIG.ZONE_DAMAGE * dt);
             if (!this.localPlayer.isAlive) {
@@ -544,10 +568,10 @@ class BattleRoyaleGame {
             this.lastSyncTime = t;
         }
 
-        // Mettre é  jour camé©ra
+        // Mettre a jour camera
         this.updateCamera();
 
-        // Mettre é  jour effets visuels
+        // Mettre a jour effets visuels
         this.updateVisualEffects(dt);
     }
 
@@ -578,24 +602,28 @@ class BattleRoyaleGame {
             }
         }
 
-        // Caché© si dans un buisson ET pas ré©vé©lé© ré©cemment
+        // Cache si dans un buisson ET pas revele recemment
         const now = performance.now();
         this.localPlayer.hidden = inBush && now > this.revealedUntil;
     }
 
     async syncPlayerPosition() {
-        await updatePlayerPosition(
-            this.localPlayer.x,
-            this.localPlayer.y,
-            this.localPlayer.angle,
-            this.localPlayer.turretAngle,
-            this.localPlayer.health,
-            this.localPlayer.hidden
-        );
+        if (typeof updatePlayerPosition === 'function') {
+            await updatePlayerPosition(
+                this.localPlayer.x,
+                this.localPlayer.y,
+                this.localPlayer.angle,
+                this.localPlayer.turretAngle,
+                this.localPlayer.health,
+                this.localPlayer.hidden
+            );
+        }
     }
 
     async handlePlayerDeath() {
-        await setPlayerDead();
+        if (typeof setPlayerDead === 'function') {
+            await setPlayerDead();
+        }
 
         // Calculer le rang
         const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive).length + 1;
@@ -603,11 +631,11 @@ class BattleRoyaleGame {
     }
 
     updateCamera() {
-        // Camé©ra suit le joueur
+        // Camera suit le joueur
         this.cameraX = this.localPlayer.x - BR_CONFIG.CAMERA_WIDTH / 2;
         this.cameraY = this.localPlayer.y - BR_CONFIG.CAMERA_HEIGHT / 2;
 
-        // Limiter la camé©ra aux bords de la map
+        // Limiter la camera aux bords de la map
         this.cameraX = Math.max(0, Math.min(this.cameraX, BR_CONFIG.MAP_WIDTH - BR_CONFIG.CAMERA_WIDTH));
         this.cameraY = Math.max(0, Math.min(this.cameraY, BR_CONFIG.MAP_HEIGHT - BR_CONFIG.CAMERA_HEIGHT));
     }
@@ -698,13 +726,44 @@ class BattleRoyaleGame {
         ctx.save();
         ctx.translate(screenX, screenY);
 
-        // Indicateur si caché© (seulement pour le joueur local)
+        // Indicateur si cache (seulement pour le joueur local)
         if (isLocal && player.hidden) {
             ctx.globalAlpha = 0.3;
         }
 
-        // Dessiner le tank (code simplifié©)
-        player.draw(ctx);
+        // Dessiner le tank a l'origine (car ctx est deja translate a screenX, screenY)
+        if (typeof player.drawLocal === 'function') {
+            player.drawLocal(ctx);
+        } else {
+            // Fallback - dessiner un tank simple
+            ctx.save();
+            ctx.rotate(player.angle * Math.PI / 180);
+
+            // Corps du tank
+            const gradient = ctx.createLinearGradient(-player.size / 2, -player.size / 2, player.size / 2, player.size / 2);
+            gradient.addColorStop(0, player.color || '#2196F3');
+            gradient.addColorStop(1, player.color2 || '#1565C0');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+
+            // Chenilles
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-player.size / 2 - 2, -player.size / 2, player.size + 4, 8);
+            ctx.fillRect(-player.size / 2 - 2, player.size / 2 - 8, player.size + 4, 8);
+
+            ctx.restore();
+
+            // Tourelle
+            ctx.save();
+            ctx.rotate(player.turretAngle * Math.PI / 180);
+            ctx.fillStyle = '#666';
+            ctx.fillRect(player.size / 4, -4, player.turretLength || 45, 8);
+            ctx.fillStyle = '#555';
+            ctx.beginPath();
+            ctx.arc(0, 0, player.size / 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
 
         ctx.restore();
 
@@ -746,25 +805,27 @@ class BattleRoyaleGame {
         // Vie
         ctx.font = 'bold 18px Rajdhani';
         ctx.fillStyle = '#FFF';
-        ctx.fillText(`â¤ï¸ ${Math.floor(this.localPlayer.health)}/100`, p, p + 20);
+        ctx.fillText('HP: ' + Math.floor(this.localPlayer.health) + '/100', p, p + 20);
 
         // Joueurs vivants
-        const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive).length +
+        const alivePlayers = Array.from(this.players.values()).filter(player => player.isAlive).length +
             (this.localPlayer.isAlive ? 1 : 0);
-        ctx.fillText(`ðŸ‘¥ Vivants: ${alivePlayers}`, p, p + 45);
+        ctx.fillText('Vivants: ' + alivePlayers, p, p + 45);
 
         // Zone
         const nextShrink = Math.ceil(this.zone.getNextShrinkTime());
-        ctx.fillText(`ðŸ”´ Zone: Phase ${this.zone.phase + 1} (${nextShrink}s)`, p, p + 70);
+        ctx.fillText('Zone: Phase ' + (this.zone.phase + 1) + ' (' + nextShrink + 's)', p, p + 70);
 
-        // Indicateur caché©
+        // Indicateur cache
         if (this.localPlayer.hidden) {
             ctx.font = 'bold 24px Rajdhani';
             ctx.fillStyle = '#00FF00';
             ctx.shadowColor = '#00FF00';
             ctx.shadowBlur = 10;
-            ctx.fillText('¿ CACHé‰', this.canvas.width / 2, 50);
+            ctx.textAlign = 'center';
+            ctx.fillText('CACHE', this.canvas.width / 2, 50);
             ctx.shadowBlur = 0;
+            ctx.textAlign = 'left';
         }
 
         // Hors zone
@@ -776,7 +837,7 @@ class BattleRoyaleGame {
             ctx.shadowBlur = 20;
 
             if (Math.floor(this.gameTime * 2) % 2 === 0) {
-                ctx.fillText('âš ï¸ HORS ZONE !', this.canvas.width / 2, this.canvas.height - 50);
+                ctx.fillText('! HORS ZONE !', this.canvas.width / 2, this.canvas.height - 50);
             }
 
             ctx.shadowBlur = 0;
@@ -792,7 +853,7 @@ class BattleRoyaleGame {
 
         ctx.font = '18px Rajdhani';
         const playerCount = this.players.size + 1;
-        ctx.fillText(`${playerCount}/${BR_CONFIG.MAX_PLAYERS} joueurs`, this.canvas.width / 2, this.canvas.height / 2 + 40);
+        ctx.fillText(playerCount + '/' + BR_CONFIG.MAX_PLAYERS + ' joueurs', this.canvas.width / 2, this.canvas.height / 2 + 40);
     }
 
     drawCountdown(ctx) {
@@ -814,9 +875,9 @@ class BattleRoyaleGame {
         ctx.textAlign = 'center';
 
         if (this.myRank === 1) {
-            ctx.fillText('ðŸ‘‘ VICTOIRE ROYALE ! ðŸ‘‘', this.canvas.width / 2, this.canvas.height / 2 - 50);
+            ctx.fillText('VICTOIRE ROYALE !', this.canvas.width / 2, this.canvas.height / 2 - 50);
         } else {
-            ctx.fillText(`Classement: #${this.myRank}`, this.canvas.width / 2, this.canvas.height / 2 - 50);
+            ctx.fillText('Classement: #' + this.myRank, this.canvas.width / 2, this.canvas.height / 2 - 50);
         }
 
         ctx.font = '24px Rajdhani';
@@ -824,4 +885,3 @@ class BattleRoyaleGame {
         ctx.fillText('Cliquez pour retourner au lobby', this.canvas.width / 2, this.canvas.height / 2 + 50);
     }
 }
-
