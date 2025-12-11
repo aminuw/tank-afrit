@@ -713,6 +713,12 @@ class BossTank extends Tank {
     updateAI(dt, player, t, w, h) {
         if (!this.isAlive) return [];
 
+        // Don't move or attack if in cage
+        if (this.inCage) {
+            this.pulseTime += dt * 5;
+            return [];
+        }
+
         const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
         const bullets = [];
 
@@ -1168,28 +1174,77 @@ class Game {
         }
     }
 
-    spawnBoss() {
+    spawnBossInCage() {
         if (this.bossActive || !this.player || !this.player.isAlive) return;
 
-        const edge = Math.floor(Math.random() * 4);
-        let x, y;
-        if (edge === 0) { x = this.canvas.width / 2; y = 50; }
-        else if (edge === 1) { x = this.canvas.width - 50; y = this.canvas.height / 2; }
-        else if (edge === 2) { x = this.canvas.width / 2; y = this.canvas.height - 50; }
-        else { x = 50; y = this.canvas.height / 2; }
+        // Spawn boss at top center
+        const x = this.canvas.width / 2;
+        const y = 100;
 
         this.boss = new BossTank(`boss_${this.wave}`, x, y, this.wave);
-        this.bossActive = true;
+        this.boss.inCage = true; // Boss is locked in cage
+        this.bossActive = false; // Not active yet
+
+        // Cage properties
+        this.bossCage = {
+            x: x,
+            y: y,
+            size: 120,
+            barCount: 8,
+            barWidth: 6,
+            shakeIntensity: 0,
+            openProgress: 0
+        };
 
         // Boss intro message
         this.floatingTexts.push(new FloatingText(
             this.canvas.width / 2,
             this.canvas.height / 2,
-            '👑 BOSS APPARAÎT! 👑',
-            '#9C27B0',
-            48
+            `⚠️ BOSS EN CAGE ⚠️`,
+            '#FFA500',
+            36
         ));
-        this.addShake(20);
+    }
+
+    releaseBoss() {
+        if (!this.boss || !this.boss.inCage) return;
+
+        // Dramatic cage opening
+        this.bossCage.shakeIntensity = 20;
+        this.addShake(25);
+
+        // Release animation
+        let openTime = 0;
+        const openInterval = setInterval(() => {
+            openTime += 50;
+            this.bossCage.openProgress = Math.min(openTime / 1000, 1);
+            this.bossCage.shakeIntensity = Math.max(0, 20 - openTime / 50);
+
+            if (openTime >= 1000) {
+                clearInterval(openInterval);
+                // Boss is now free!
+                this.boss.inCage = false;
+                this.bossActive = true;
+                this.bossCage = null;
+
+                // Epic boss release message
+                this.floatingTexts.push(new FloatingText(
+                    this.canvas.width / 2,
+                    this.canvas.height / 2 - 50,
+                    `👑 BOSS VAGUE ${this.wave} 👑`,
+                    '#FF1744',
+                    48
+                ));
+                this.floatingTexts.push(new FloatingText(
+                    this.canvas.width / 2,
+                    this.canvas.height / 2 + 20,
+                    `LIBÉRÉ !`,
+                    '#FFD700',
+                    36
+                ));
+                this.triggerSlowMo();
+            }
+        }, 50);
     }
 
     setupEvents() {
@@ -1301,13 +1356,18 @@ class Game {
             for (let i = 0; i < this.enemiesThisWave; i++) {
                 setTimeout(() => this.spawnEnemy(), i * 400);
             }
-            // Spawn boss after all enemies
-            setTimeout(() => this.spawnBoss(), (this.enemiesThisWave * 400) + 1000);
+            // Spawn boss in cage at start of wave
+            this.spawnBossInCage();
         }, 3000);
     }
 
     checkWaveComplete() {
-        // Boss must be defeated too
+        // Check if all enemies are dead to release boss
+        if (this.state === 'playing' && this.enemies.length === 0 && this.enemiesThisWave === 0 && this.boss && this.boss.inCage) {
+            this.releaseBoss();
+        }
+
+        // Boss must be defeated too to complete wave
         if (this.state === 'playing' && this.enemies.length === 0 && this.enemiesThisWave === 0 && !this.bossActive) {
             this.state = 'wave_complete';
             this.waveStartTime = performance.now();
@@ -1594,6 +1654,10 @@ class Game {
             this.powerUps.forEach(p => p.draw(ctx));
             this.enemies.forEach(e => e.draw(ctx));
             if (this.boss && this.boss.isAlive) this.boss.draw(ctx);
+
+            // Draw boss cage if exists
+            if (this.bossCage) this.drawBossCage(ctx);
+
             if (this.player) this.player.draw(ctx);
             this.bullets.forEach(b => b.draw(ctx));
             this.explosions.forEach(e => e.draw(ctx));
@@ -1610,6 +1674,95 @@ class Game {
 
             // Draw Skill UI overlay
             if (this.showSkillUI && this.player) this.drawSkillUI(ctx);
+        }
+
+        ctx.restore();
+    }
+
+    drawBossCage(ctx) {
+        if (!this.bossCage) return;
+
+        const cage = this.bossCage;
+        const shake = (Math.random() - 0.5) * cage.shakeIntensity;
+
+        ctx.save();
+        ctx.translate(shake, shake);
+
+        // Cage base (floor)
+        ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+        ctx.fillRect(cage.x - cage.size / 2, cage.y + cage.size / 2 - 10, cage.size, 10);
+
+        // Vertical bars
+        const barSpacing = cage.size / cage.barCount;
+        for (let i = 0; i <= cage.barCount; i++) {
+            const barX = cage.x - cage.size / 2 + i * barSpacing;
+            const barHeight = cage.size;
+
+            // Opening animation - bars slide up
+            const slideUp = cage.openProgress * barHeight;
+
+            ctx.save();
+            ctx.fillStyle = '#666';
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 2;
+
+            // Bar with gradient
+            const gradient = ctx.createLinearGradient(barX, cage.y - cage.size / 2, barX, cage.y + cage.size / 2);
+            gradient.addColorStop(0, '#888');
+            gradient.addColorStop(0.5, '#666');
+            gradient.addColorStop(1, '#444');
+            ctx.fillStyle = gradient;
+
+            // Draw bar (slides up when opening)
+            ctx.fillRect(
+                barX - cage.barWidth / 2,
+                cage.y - cage.size / 2 - slideUp,
+                cage.barWidth,
+                barHeight
+            );
+            ctx.strokeRect(
+                barX - cage.barWidth / 2,
+                cage.y - cage.size / 2 - slideUp,
+                cage.barWidth,
+                barHeight
+            );
+            ctx.restore();
+        }
+
+        // Top bar (horizontal)
+        if (cage.openProgress < 0.5) {
+            ctx.fillStyle = '#555';
+            ctx.strokeStyle = '#777';
+            ctx.lineWidth = 3;
+            ctx.fillRect(cage.x - cage.size / 2 - 10, cage.y - cage.size / 2 - 15, cage.size + 20, 15);
+            ctx.strokeRect(cage.x - cage.size / 2 - 10, cage.y - cage.size / 2 - 15, cage.size + 20, 15);
+        }
+
+        // Warning signs
+        if (cage.openProgress < 0.8) {
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FF0000';
+            ctx.shadowColor = '#FF0000';
+            ctx.shadowBlur = 10;
+
+            // Blinking warning
+            if (Math.floor(Date.now() / 500) % 2 === 0) {
+                ctx.fillText('⚠️', cage.x, cage.y - cage.size / 2 - 30);
+                ctx.fillText('DANGER', cage.x, cage.y + cage.size / 2 + 30);
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // Lock icon (disappears when opening)
+        if (cage.openProgress < 0.3) {
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FFD700';
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 15;
+            ctx.fillText('🔒', cage.x, cage.y - cage.size / 2 - 50);
+            ctx.shadowBlur = 0;
         }
 
         ctx.restore();
