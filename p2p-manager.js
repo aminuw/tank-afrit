@@ -1,5 +1,5 @@
-// P2P MANAGER - HYBRIDE FIREBASE / WEBRTC
-// Objectif : Lobby via Firebase (Léger), Gameplay via PeerJS (P2P direct, Rapide, Gratuit, Netlify-friendly)
+// P2P MANAGER - HYBRIDE FIREBASE / WEBRTC (V2 - Promise Fix)
+// Compatible avec les appels de game.js (async/await)
 
 const firebaseConfig = {
     apiKey: "AIzaSyBKrkx3sfcpVWz_S2VcgusXiZDX5RDimUc",
@@ -16,32 +16,29 @@ let peer;
 let myPeerId;
 let isHost = false;
 let hostConnection = null;
-let connections = []; // Array of DataConnections (Host side)
+let connections = [];
 let gameUpdateCallback = null;
-let gameState = { players: {}, bullets: {}, zone: { radius: 1200, centerX: 1200, centerY: 800 } }; // Master State
+let gameState = { players: {}, bullets: {}, zone: { radius: 1200, centerX: 1200, centerY: 800 } };
 
 function initFirebase() {
-    // 1. Init Firebase (Lobby)
     if (typeof firebase !== 'undefined' && !firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
     }
 
-    // 2. Init PeerJS (Gameplay)
     peer = new Peer(null, { debug: 1 });
 
     peer.on('open', (id) => {
         console.log('✅ P2P Ready. ID:', id);
         myPeerId = id;
-        window.currentPlayerId = id; // IMPORTANT : On utilise le PeerID comme PlayerID interne
+        window.currentPlayerId = id;
     });
 
-    // HOST : Réception connexion client
     peer.on('connection', (conn) => {
         connections.push(conn);
         conn.on('data', (data) => handlePacket(data, conn));
         conn.on('close', () => {
             if (gameState.players[conn.peer]) {
-                gameState.players[conn.peer].alive = false; // Marquer comme mort/déco
+                gameState.players[conn.peer].alive = false;
                 delete gameState.players[conn.peer];
             }
         });
@@ -50,7 +47,6 @@ function initFirebase() {
     return true;
 }
 
-// Logique HOST : Traiter les paquets des clients
 function handlePacket(packet, conn) {
     if (packet.type === 'JOIN') {
         gameState.players[conn.peer] = {
@@ -59,113 +55,112 @@ function handlePacket(packet, conn) {
             hp: 100, alive: true,
             x: 0, y: 0, angle: 0
         };
-        // On renvoie immediatement l'etat pour que le client charge
         conn.send({ type: 'STATE', state: gameState });
 
     } else if (packet.type === 'MOVE') {
         if (gameState.players[conn.peer]) {
             Object.assign(gameState.players[conn.peer], packet.data);
         }
-
     } else if (packet.type === 'SHOOT') {
-        // Relai de balle aux autres clients
         broadcast({ type: 'BULLET', data: packet.data });
     } else if (packet.type === 'HIT') {
-        // Gestion dégâts (sommaire)
         const target = gameState.players[packet.targetId];
         if (target) target.hp -= packet.damage;
     }
 }
 
-// CREATION PARTIE (Netlify Friendly)
-function createGame(data, cb) {
-    isHost = true;
-    const code = Math.random().toString(36).substr(2, 4).toUpperCase();
+// --- API PUBLIQUE (PROMISE-BASED) ---
 
-    // Init state local
-    gameState.players[myPeerId] = {
-        name: data.players[data.host].name,
-        skin: data.players[data.host].skin,
-        hp: 100, alive: true, x: 0, y: 0
-    };
-
-    // Enregistrement dans Firebase (Juste pour le listing)
-    firebase.database().ref('games/' + code).set({
-        hostPeerId: myPeerId, // La clé pour que les clients se connectent
-        hostName: data.players[data.host].name,
-        status: 'waiting',
-        createdAt: firebase.database.ServerValue.TIMESTAMP
-    });
-
-    // BOUCLE SERVEUR (30 FPS) - Envoi de l'état du monde aux clients
-    setInterval(() => {
-        if (isHost) {
-            broadcast({ type: 'STATE', state: gameState });
-            // Update local
-            if (gameUpdateCallback) gameUpdateCallback(gameState);
+function createGame(name, skin, isPublic) {
+    return new Promise((resolve, reject) => {
+        // Attendre que PeerJS soit pret
+        if (!myPeerId) {
+            console.log("⏳ Attente P2P Init...");
+            const check = setInterval(() => {
+                if (myPeerId) { clearInterval(check); createGame(name, skin, isPublic).then(resolve).catch(reject); }
+            }, 100);
+            return;
         }
-    }, 33);
 
-    cb({ [code]: gameState });
+        isHost = true;
+        const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        gameState.players[myPeerId] = {
+            name: name, skin: skin,
+            hp: 100, alive: true, isHost: true,
+            x: 0, y: 0, angle: 0
+        };
+
+        firebase.database().ref('games/' + code).set({
+            hostPeerId: myPeerId,
+            hostName: name,
+            status: 'waiting',
+            createdAt: firebase.database.ServerValue.TIMESTAMP
+        }).then(() => {
+            // Demarrage boucle serveur
+            setInterval(() => {
+                if (isHost) {
+                    broadcast({ type: 'STATE', state: gameState });
+                    if (gameUpdateCallback) gameUpdateCallback(gameState);
+                }
+            }, 33);
+            resolve({ gameCode: code });
+        }).catch(reject);
+    });
 }
 
-// REJOINDRE PARTIE
-function joinGame(code, name, skin, cb) {
-    // 1. Chercher le HostID dans Firebase
-    firebase.database().ref('games/' + code).once('value', s => {
-        const val = s.val();
-        if (!val) return alert('Partie introuvable');
 
-        // 2. Connexion P2P Directe au Host
-        const conn = peer.connect(val.hostPeerId);
-        hostConnection = conn;
+function joinGame(code, name, skin) {
+    return new Promise((resolve, reject) => {
+        if (!myPeerId) {
+            const check = setInterval(() => {
+                if (myPeerId) { clearInterval(check); joinGame(code, name, skin).then(resolve).catch(reject); }
+            }, 100);
+            return;
+        }
 
-        conn.on('open', () => {
-            console.log('✅ Connecté au Host P2P !');
-            conn.send({ type: 'JOIN', name, skin });
-        });
+        firebase.database().ref('games/' + code).once('value', s => {
+            const val = s.val();
+            if (!val) return reject("Partie introuvable");
 
-        conn.on('data', (packet) => {
-            if (packet.type === 'STATE') {
-                gameState = packet.state; // Synchro Client
-                if (gameUpdateCallback) gameUpdateCallback(gameState);
+            const conn = peer.connect(val.hostPeerId);
+            hostConnection = conn;
 
-            } else if (packet.type === 'BULLET') {
-                // Injection de balle (Event)
-                if (gameUpdateCallback) {
-                    // On simule un packet gameData avec bullets
-                    gameUpdateCallback({ bullets: { [packet.data.id]: packet.data } });
+            conn.on('open', () => {
+                conn.send({ type: 'JOIN', name, skin });
+                resolve({ gameCode: code });
+            });
+
+            conn.on('data', (packet) => {
+                if (packet.type === 'STATE') {
+                    gameState = packet.state;
+                    if (gameUpdateCallback) gameUpdateCallback(gameState);
+                } else if (packet.type === 'BULLET') {
+                    if (gameUpdateCallback) gameUpdateCallback({ bullets: { [packet.data.id]: packet.data } });
                 }
-            }
-        });
+            });
 
-        cb({ code, players: {} });
+            setTimeout(() => { if (!conn.open) reject("Timeout connexion Host"); }, 5000);
+        });
     });
 }
 
 function broadcast(msg) {
-    connections.forEach(c => {
-        if (c.open) c.send(msg);
-    });
+    connections.forEach(c => { if (c.open) c.send(msg); });
 }
 
-// Envoi Position (Appelé par game.js)
 function updatePlayerPosition(gameCode, id, data) {
     if (isHost) {
-        // Update direct du state master
         if (gameState.players[myPeerId]) Object.assign(gameState.players[myPeerId], data);
     } else if (hostConnection && hostConnection.open) {
-        // Envoi au Host
         hostConnection.send({ type: 'MOVE', data });
     }
 }
 
-// Tir
 function sendBullet(id, x, y, a, d) {
     const b = { id, x, y, angle: a, damage: d, ownerId: myPeerId };
     if (isHost) {
         broadcast({ type: 'BULLET', data: b });
-        // Pour le host, le jeu local gère déjà la création visuelle
     } else if (hostConnection && hostConnection.open) {
         hostConnection.send({ type: 'SHOOT', data: b });
     }
@@ -177,22 +172,20 @@ function sendHit(targetId, damage) {
 
 function listenToGame(cb) { gameUpdateCallback = cb; }
 
-// Stubs de compatibilité
-function generatePlayerId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
+// Stubs
+function generatePlayerId() { return myPeerId || 'init_' + Math.random(); }
 function startListening() { }
 function stopListening() { }
 function leaveGame() { window.location.reload(); }
 function setPlayerReady() { }
 function setPlayerDead() { }
 function getActiveGames(cb) {
-    // On garde la liste Firebase qui marche très bien pour ça
     firebase.database().ref('games').limitToLast(10).once('value', s => cb(s.val() || {}));
 }
 function listenToPublicGames() { }
 function cleanupOldGames() { }
 function generateGameCode() { return 'P2P'; }
 
-// Exports Globaux
 window.initFirebase = initFirebase;
 window.createGame = createGame;
 window.joinGame = joinGame;
