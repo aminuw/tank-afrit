@@ -83,18 +83,21 @@ io.on('connection', (socket) => {
     socket.on('startGame', () => {
         const code = getPlayerRoom(socket);
         if (code && games[code].hostId === socket.id) {
-            games[code].status = 'playing';
+
+            // Phase 1: Countdown
+            games[code].status = 'countdown';
+            games[code].countdown = 5; // 5 secondes
 
             // Initialisation de la Zone (Storm)
             games[code].zone = {
-                x: 1000, y: 1000, // Centre de la map 2000x2000
-                radius: 1200,     // Commence large
-                targetRadius: 100,// Finit tout petit
-                shrinkSpeed: 0.3  // Vitesse de rétrécissement
+                x: 1000, y: 1000, // Centre
+                radius: 1500,     // Commence très large (hors écran)
+                targetRadius: 0,  // Finit au centre (mortel)
+                shrinkSpeed: 0.4  // Vitesse
             };
 
             startGameLoop(code);
-            io.to(code).emit('gameStarted');
+            io.to(code).emit('gameUpdate', { status: 'countdown', countdown: 5 });
         }
     });
 
@@ -115,63 +118,91 @@ io.on('connection', (socket) => {
 function startGameLoop(code) {
     if (games[code].interval) clearInterval(games[code].interval);
 
-    console.log(`🌀 Zone démarrée pour la game ${code}`);
+    console.log(`🌀 Loop démarrée pour la game ${code}`);
 
     games[code].interval = setInterval(() => {
         const game = games[code];
         if (!game) return;
 
-        // 1. Rétrécir la Zone
-        if (game.zone.radius > game.zone.targetRadius) {
-            game.zone.radius -= game.zone.shrinkSpeed;
+        // PHASE 1: COMPTE A REBOURS
+        if (game.status === 'countdown') {
+            game.countdown -= 0.1; // 10 ticks/s
+            if (game.countdown <= 0) {
+                game.status = 'playing';
+                io.to(code).emit('gameUpdate', { status: 'playing' });
+                io.to(code).emit('gameStarted'); // Le vrai début
+            } else {
+                // On envoie le temps aux joueurs pour l'affichage (arrondi)
+                // Optimisation: on pourrait l'envoyer moins souvent, mais simple ici.
+            }
+            // On envoie un update léger
+            io.to(code).emit('gameUpdate', { status: 'countdown', countdown: Math.ceil(game.countdown) });
+            return;
         }
 
-        // 2. Vérifier les joueurs (Dégâts de zone + Win Condition)
-        let aliveCount = 0;
-        let lastSurvivorId = null;
-        let someoneDied = false;
+        // PHASE 2: JEU ACTIF (Zone + Win Condition)
+        if (game.status === 'playing') {
+            // 1. Rétrécir la Zone
+            if (game.zone.radius > game.zone.targetRadius) {
+                game.zone.radius -= game.zone.shrinkSpeed;
+            }
 
-        Object.values(game.players).forEach(p => {
-            if (p.hp > 0) {
-                aliveCount++;
-                lastSurvivorId = p.id;
+            // 2. Vérifier les joueurs (Dégâts de zone + Win Condition)
+            let aliveCount = 0;
+            let lastSurvivorId = null;
+            let someoneDied = false;
 
-                // Est-il dans la zone ?
-                const dist = Math.sqrt(Math.pow(p.x - game.zone.x, 2) + Math.pow(p.y - game.zone.y, 2));
-                if (dist > game.zone.radius) {
-                    // Dégâts de storm
-                    p.hp -= 0.5;
-                    someoneDied = true; // Force update
-                    if (p.hp <= 0) {
-                        p.hp = 0;
-                        io.to(code).emit('playerKilled', { victimId: p.id, killerId: 'LA ZONE' });
+            Object.values(game.players).forEach(p => {
+                if (p.hp > 0) {
+                    aliveCount++;
+                    lastSurvivorId = p.id;
+
+                    // Est-il dans la zone ?
+                    const dist = Math.sqrt(Math.pow(p.x - game.zone.x, 2) + Math.pow(p.y - game.zone.y, 2));
+                    if (dist > game.zone.radius) {
+                        // Dégâts de storm
+                        p.hp -= 0.5;
+                        someoneDied = true;
+                        if (p.hp <= 0) {
+                            p.hp = 0;
+                            io.to(code).emit('playerKilled', { victimId: p.id, killerId: 'LA ZONE' });
+                        }
                     }
                 }
+            });
+
+            // 3. Victoire ? (S'il ne reste qu'un survivant et qu'on jouait)
+            // Note: >1 au départ pour éviter win instantanée si on est seul pour tester
+            if (Object.keys(game.players).length > 1 && aliveCount <= 1) {
+                clearInterval(game.interval);
+                game.status = 'finished';
+                console.log(`🏆 Victoire de ${lastSurvivorId}`);
+                io.to(code).emit('gameOver', { winnerId: lastSurvivorId });
             }
-        });
 
-        // 3. Victoire ? (S'il ne reste qu'un survivant et qu'on jouait)
-        if (Object.keys(game.players).length > 1 && aliveCount <= 1 && game.status === 'playing') {
-            clearInterval(game.interval);
-            game.status = 'finished';
-            console.log(`🏆 Victoire de ${lastSurvivorId}`);
-            io.to(code).emit('gameOver', { winnerId: lastSurvivorId });
+            // 4. Sync périodique
+            io.to(code).emit('zoneUpdate', game.zone);
+            if (someoneDied) io.to(code).emit('updatePlayerList', game.players);
         }
-
-        // 4. Sync périodique (Zone + HP si storm damage)
-        io.to(code).emit('zoneUpdate', game.zone);
-        if (someoneDied) io.to(code).emit('updatePlayerList', game.players);
 
     }, 100); // 10 ticks par seconde
 }
 
 function joinGameLocally(socket, code, name, skin, isHost) {
     socket.join(code);
+
+    // SPAWN ALEATOIRE (Carte 2000x2000)
+    // On évite les bords extrêmes
+    const spawnX = 200 + Math.random() * 1600;
+    const spawnY = 200 + Math.random() * 1600;
+
     games[code].players[socket.id] = {
         id: socket.id,
         name, skin,
         isHost,
-        hp: 100
+        hp: 100,
+        x: spawnX,
+        y: spawnY
     };
 
     // Renvoyer infos au joueur
@@ -179,7 +210,7 @@ function joinGameLocally(socket, code, name, skin, isHost) {
         code,
         isHost,
         playerId: socket.id,
-        map: games[code].map // Envoi de la map
+        map: games[code].map
     });
 
     // Mettre à jour tout le monde dans la room

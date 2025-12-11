@@ -79,6 +79,11 @@ class BattleRoyaleGame {
                 // Mise à jour de la Zone
                 if (state.zone) this.zone = state.zone;
 
+                // Status UPDATE
+                if (state.status) this.status = state.status;
+                if (state.countdown) this.countdown = state.countdown;
+                if (state.winnerId) this.winner = state.winnerId;
+
                 // Mise à jour des joueurs (positions, vie...)
                 if (state.players) {
                     // CLIENT PREDICTION : On ne met à jour QUE les autres joueurs.
@@ -228,7 +233,8 @@ class BattleRoyaleGame {
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         this.drawGrid();
-        this.drawMap(); // Environnement
+        this.drawMap();
+        this.drawZone();
 
         // Afficher tous les joueurs
         Object.values(this.players).forEach(p => {
@@ -245,6 +251,51 @@ class BattleRoyaleGame {
             this.ctx.fill();
         });
         this.ctx.shadowBlur = 0;
+
+        // UI : COUNTDOWN
+        if (this.status === 'countdown' && this.countdown) {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 80px "Orbitron", sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText("LA PARTIE COMMENCE DANS", this.width / 2, this.height / 2 - 50);
+            this.ctx.fillStyle = '#ffeb3b';
+            this.ctx.font = 'bold 120px "Orbitron", sans-serif';
+            this.ctx.fillText(this.countdown, this.width / 2, this.height / 2 + 80);
+        }
+
+        // UI : VICTORY / GAME OVER
+        if (this.status === 'finished') {
+            this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+
+            this.ctx.textAlign = 'center';
+            if (this.winner === this.myId) {
+                this.ctx.fillStyle = '#FFD700'; // Gold
+                this.ctx.font = 'bold 80px "Orbitron", sans-serif';
+                this.ctx.fillText("🏆 VICTOIRE ROYALE !", this.width / 2, this.height / 2 - 50);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '30px Arial';
+                this.ctx.fillText("Tu es le dernier survivant", this.width / 2, this.height / 2 + 20);
+            } else {
+                this.ctx.fillStyle = '#f44336'; // Red
+                this.ctx.font = 'bold 80px "Orbitron", sans-serif';
+                this.ctx.fillText("💀 GAME OVER", this.width / 2, this.height / 2 - 50);
+                this.ctx.fillStyle = '#aaa';
+                this.ctx.font = '30px Arial';
+                this.ctx.fillText("Meilleure chance la prochaine fois...", this.width / 2, this.height / 2 + 20);
+            }
+
+            // BOUTON QUITTER
+            const btnX = this.width / 2 - 100;
+            const btnY = this.height / 2 + 100;
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(btnX, btnY, 200, 60);
+            this.ctx.fillStyle = '#000';
+            this.ctx.font = 'bold 24px Arial';
+            this.ctx.fillText("QUITTER", this.width / 2, btnY + 40);
+        }
     }
 
     drawMap() {
@@ -264,12 +315,52 @@ class BattleRoyaleGame {
         });
     }
 
+    drawZone() {
+        if (!this.zone) return;
+
+        // Dessiner le STORM (Zone Rouge extérieure)
+        this.ctx.save();
+        this.ctx.beginPath();
+        // Grand rectangle extérieur
+        this.ctx.rect(0, 0, this.width, this.height);
+        // Trou circulaire (Zone safe)
+        this.ctx.arc(this.zone.x, this.zone.y, this.zone.radius, 0, Math.PI * 2, true);
+        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.2)'; // Rouge danger
+        this.ctx.fill();
+
+        // Bordure zone
+        this.ctx.strokeStyle = '#f00';
+        this.ctx.lineWidth = 5;
+        this.ctx.beginPath();
+        this.ctx.arc(this.zone.x, this.zone.y, this.zone.radius, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.restore();
+    }
+
     drawPlayer(p) {
         const ctx = this.ctx;
         if (!p.x) p.x = 200;
         if (!p.y) p.y = 200;
 
+        // --- BUSH STEALTH LOGIC ---
+        let opacity = 1.0;
+        if (this.map) {
+            for (let obj of this.map) {
+                if (obj.type === 'bush') {
+                    // Check collision point (center)
+                    const dist = Math.sqrt((p.x - obj.x) ** 2 + (p.y - obj.y) ** 2);
+                    if (dist < obj.size / 2) {
+                        // Inside bush
+                        if (p.id === this.myId) opacity = 0.6; // Me -> Semi-transparent
+                        else opacity = 0; // Enemy -> Invisible
+                        break;
+                    }
+                }
+            }
+        }
+
         ctx.save();
+        ctx.globalAlpha = opacity;
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle || 0);
 
@@ -287,17 +378,23 @@ class BattleRoyaleGame {
         ctx.restore();
 
         // Nom
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name, p.x, p.y - 35);
+        if (opacity > 0) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.name, p.x, p.y - 35);
+        }
+
+        ctx.globalAlpha = 1.0; // Reset
 
         // Sante
-        const hp = (p.hp !== undefined) ? p.hp : 100;
-        ctx.fillStyle = '#f00';
-        ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(p.x - 20, p.y - 30, 40 * (hp / 100), 5);
+        if (opacity > 0) {
+            const hp = (p.hp !== undefined) ? p.hp : 100;
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(p.x - 20, p.y - 30, 40 * (hp / 100), 5);
+        }
     }
 
     drawGrid() {

@@ -92,8 +92,13 @@ socket.on('zoneUpdate', (zone) => {
 socket.on('gameOver', ({ winnerId }) => {
     gameState.status = 'finished';
     gameState.winnerId = winnerId;
-    alert(winnerId === socket.id ? "🏆 VICTOIRE ROYALE !" : "💀 GAME OVER");
-    // TODO: Afficher bel écran de fin
+    // On laisse battle-royale.js gérer l'affichage
+    if (gameUpdateCallback) gameUpdateCallback(gameState);
+});
+
+socket.on('gameUpdate', (data) => {
+    Object.assign(gameState, data);
+    if (gameUpdateCallback) gameUpdateCallback(gameState);
 });
 
 // --- ACTIONS JEU ---
