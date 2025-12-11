@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TANK BRAWLER LAN - ÉDITION ULTIME
  * Effets dynamiques de fou : Screen shake, slow-mo, combos, dash, etc.
  */
@@ -1031,7 +1031,7 @@ class Game {
 
     setupLoginUI() {
         const overlay = document.getElementById('login-overlay');
-        const startBtn = document.getElementById('start-game-btn');
+        const startBtn = document.getElementById('start-solo-btn');
         const nameInput = document.getElementById('player-name');
         const skins = document.querySelectorAll('.skin-option');
         const previewCanvas = document.getElementById('tank-preview');
@@ -1088,7 +1088,7 @@ class Game {
         });
 
         // Start game
-        startBtn.addEventListener('click', () => {
+        startBtn?.addEventListener('click', () => {
             this.playerName = nameInput.value.trim() || 'Joueur';
             overlay.classList.add('hidden');
             setTimeout(() => this.startWave(1), 100);
@@ -2126,22 +2126,216 @@ class Game {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => new Game());
 // ---------------------------------------------------------------------------
-// NAVIGATION ENTRE LES MODES
+// NAVIGATION ENTRE LES MODES ET GESTION DES LOBBIES
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ========== ÉLÉMENTS DOM ==========
     const modeSelection = document.getElementById('mode-selection-overlay');
     const soloLobby = document.getElementById('solo-lobby-overlay');
     const brLobby = document.getElementById('br-lobby-overlay');
-    
+
     const modeSolo = document.getElementById('mode-solo');
     const modeBR = document.getElementById('mode-battle-royale');
-    
+
     const backFromSolo = document.getElementById('back-from-solo');
     const backFromBR = document.getElementById('back-from-br');
-    
+
+    // ========== ÉTAT GLOBAL ==========
+    let soloSettings = {
+        playerName: 'Joueur',
+        playerSkin: { color: '#2196F3', color2: '#1565C0' },
+        selectedMap: 'christmas',
+        difficulty: 'medium'
+    };
+
+    let brSettings = {
+        playerName: 'Joueur',
+        playerSkin: { color: '#2196F3', color2: '#1565C0' }
+    };
+
+    // ========== FONCTIONS DE PREVIEW ==========
+    function renderTankPreview(ctx, canvas, skin, name) {
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const size = 40;
+        const turretLength = 50;
+
+        // Corps du tank
+        ctx.save();
+        ctx.translate(centerX, centerY);
+
+        // Ombre
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-size / 2 + 4, -size / 2 + 4, size, size);
+
+        // Chenilles
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-size / 2 - 2, -size / 2, size + 4, 8);
+        ctx.fillRect(-size / 2 - 2, size / 2 - 8, size + 4, 8);
+
+        // Corps avec gradient
+        const g = ctx.createLinearGradient(-size / 2, -size / 2, size / 2, size / 2);
+        g.addColorStop(0, skin.color);
+        g.addColorStop(1, skin.color2);
+        ctx.fillStyle = g;
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+
+        // Bordure
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-size / 2, -size / 2, size, size);
+
+        // Reflet
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(-size / 2 + 3, -size / 2 + 3, size - 6, size / 3);
+        ctx.restore();
+
+        // Tourelle
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        const tg = ctx.createLinearGradient(0, -4, 0, 4);
+        tg.addColorStop(0, '#666');
+        tg.addColorStop(0.5, '#888');
+        tg.addColorStop(1, '#555');
+        ctx.fillStyle = tg;
+        ctx.fillRect(size / 4, -4, turretLength - size / 4, 8);
+
+        // Bout du canon
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(turretLength, 0, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Base tourelle
+        const bg = ctx.createRadialGradient(0, 0, 0, 0, 0, size / 3);
+        bg.addColorStop(0, '#777');
+        bg.addColorStop(1, '#444');
+        ctx.fillStyle = bg;
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+
+        // Nom du joueur
+        ctx.font = 'bold 16px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(name, centerX, centerY - size - 10);
+        ctx.fillStyle = '#FFF';
+        ctx.fillText(name, centerX, centerY - size - 10);
+    }
+
+    // ========== INITIALISATION LOBBY SOLO ==========
+    function initSoloLobby() {
+        const nameInput = document.getElementById('player-name');
+        const skins = document.querySelectorAll('#solo-lobby-overlay .skins-grid .skin-option');
+        const maps = document.querySelectorAll('.map-option');
+        const difficulties = document.querySelectorAll('.difficulty-option');
+        const previewCanvas = document.getElementById('tank-preview');
+        const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+
+        // Rendu initial
+        if (previewCtx) {
+            renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+        }
+
+        // Sélection de skin
+        skins.forEach((skin, index) => {
+            skin.addEventListener('click', () => {
+                skins.forEach(s => s.classList.remove('selected'));
+                skin.classList.add('selected');
+
+                soloSettings.playerSkin = {
+                    color: skin.dataset.color,
+                    color2: skin.dataset.color2
+                };
+
+                if (previewCtx) {
+                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+                }
+            });
+        });
+
+        // Sélection de map
+        maps.forEach(map => {
+            map.addEventListener('click', () => {
+                maps.forEach(m => m.classList.remove('selected'));
+                map.classList.add('selected');
+                soloSettings.selectedMap = map.dataset.map;
+            });
+        });
+
+        // Sélection de difficulté
+        difficulties.forEach(diff => {
+            diff.addEventListener('click', () => {
+                difficulties.forEach(d => d.classList.remove('selected'));
+                diff.classList.add('selected');
+                soloSettings.difficulty = diff.dataset.difficulty;
+            });
+        });
+
+        // Mise à jour du nom
+        if (nameInput) {
+            nameInput.addEventListener('input', () => {
+                soloSettings.playerName = nameInput.value.trim() || 'Joueur';
+                if (previewCtx) {
+                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+                }
+            });
+        }
+    }
+
+    // ========== INITIALISATION LOBBY BR ==========
+    function initBRLobby() {
+        const nameInput = document.getElementById('br-player-name');
+        const skins = document.querySelectorAll('#br-skins-grid .skin-option');
+        const previewCanvas = document.getElementById('br-tank-preview');
+        const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+
+        // Rendu initial
+        if (previewCtx) {
+            renderTankPreview(previewCtx, previewCanvas, brSettings.playerSkin, brSettings.playerName);
+        }
+
+        // Sélection de skin
+        skins.forEach(skin => {
+            skin.addEventListener('click', () => {
+                skins.forEach(s => s.classList.remove('selected'));
+                skin.classList.add('selected');
+
+                brSettings.playerSkin = {
+                    color: skin.dataset.color,
+                    color2: skin.dataset.color2
+                };
+
+                if (previewCtx) {
+                    renderTankPreview(previewCtx, previewCanvas, brSettings.playerSkin, brSettings.playerName);
+                }
+            });
+        });
+
+        // Mise à jour du nom
+        if (nameInput) {
+            nameInput.addEventListener('input', () => {
+                brSettings.playerName = nameInput.value.trim() || 'Joueur';
+                if (previewCtx) {
+                    renderTankPreview(previewCtx, previewCanvas, brSettings.playerSkin, brSettings.playerName);
+                }
+            });
+        }
+    }
+
+    // ========== NAVIGATION ==========
+
     // Cliquer sur Solo
     if (modeSolo) {
         modeSolo.addEventListener('click', () => {
@@ -2149,28 +2343,28 @@ document.addEventListener('DOMContentLoaded', () => {
             soloLobby.classList.remove('hidden');
         });
     }
-    
+
     // Cliquer sur Battle Royale
     if (modeBR) {
         modeBR.addEventListener('click', () => {
             modeSelection.classList.add('hidden');
             brLobby.classList.remove('hidden');
-            
+
             // Initialiser Firebase
             if (typeof initFirebase === 'function') {
                 if (!initFirebase()) {
-                    alert('Erreur: Firebase n est pas configur� correctement.');
+                    alert('Erreur: Firebase n\'est pas configuré correctement.');
                     brLobby.classList.add('hidden');
                     modeSelection.classList.remove('hidden');
                 }
             } else {
-                alert('Erreur: Firebase SDK non charg�. V�rifiez index.html');
+                alert('Erreur: Firebase SDK non chargé. Vérifiez index.html');
                 brLobby.classList.add('hidden');
                 modeSelection.classList.remove('hidden');
             }
         });
     }
-    
+
     // Retour depuis Solo
     if (backFromSolo) {
         backFromSolo.addEventListener('click', () => {
@@ -2178,7 +2372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             modeSelection.classList.remove('hidden');
         });
     }
-    
+
     // Retour depuis BR
     if (backFromBR) {
         backFromBR.addEventListener('click', () => {
@@ -2186,87 +2380,77 @@ document.addEventListener('DOMContentLoaded', () => {
             modeSelection.classList.remove('hidden');
         });
     }
-    
-    // D�marrer Solo
+
+    // ========== DÉMARRER SOLO ==========
     const startSoloBtn = document.getElementById('start-solo-btn');
     if (startSoloBtn) {
         startSoloBtn.addEventListener('click', () => {
-            const playerName = document.getElementById('player-name').value.trim() || 'Joueur';
             soloLobby.classList.add('hidden');
-            
+
             setTimeout(() => {
-                const game = new Game(document.getElementById('gameCanvas'));
-                game.playerName = playerName;
+                // Créer une nouvelle instance de Game
+                const game = new Game();
+
+                // Appliquer les paramètres du lobby
+                game.playerName = soloSettings.playerName;
+                game.playerSkin = soloSettings.playerSkin;
+                game.selectedMap = soloSettings.selectedMap;
+                game.difficulty = soloSettings.difficulty;
+
+                // Initialiser le thème de map
+                game.initializeMap();
+
+                // Démarrer le jeu
                 game.startWave(1);
             }, 100);
         });
     }
-    
-    // Cr�er partie BR
+
+    // ========== CRÉER PARTIE BR ==========
     const createGameBtn = document.getElementById('create-game-btn');
     if (createGameBtn) {
         createGameBtn.addEventListener('click', async () => {
-            const playerName = document.getElementById('br-player-name').value.trim() || 'Joueur';
-            
-            const selectedSkin = document.querySelector('#br-skins-grid .skin-option.selected');
-            const playerSkin = {
-                color: selectedSkin?.dataset.color || '#2196F3',
-                color2: selectedSkin?.dataset.color2 || '#1565C0'
-            };
-            
             try {
-                const result = await createGame(playerName, playerSkin);
+                const result = await createGame(brSettings.playerName, brSettings.playerSkin);
                 if (result) {
-                    console.log('Partie cr��e ! Code: ' + result.gameCode);
+                    console.log('Partie créée ! Code: ' + result.gameCode);
                     brLobby.classList.add('hidden');
-                    
+
                     // Afficher la salle d'attente
-                    new WaitingRoom(result.gameCode, true, playerName);
+                    new WaitingRoom(result.gameCode, true, brSettings.playerName);
                 }
             } catch (error) {
-                alert('Erreur lors de la cr�ation: ' + error.message);
+                alert('Erreur lors de la création: ' + error.message);
             }
         });
     }
-    
-    // Rejoindre partie BR
+
+    // ========== REJOINDRE PARTIE BR ==========
     const joinGameBtn = document.getElementById('join-game-btn');
     if (joinGameBtn) {
         joinGameBtn.addEventListener('click', async () => {
             const gameCode = document.getElementById('game-code-input').value.trim().toUpperCase();
-            const playerName = document.getElementById('br-player-name').value.trim() || 'Joueur';
-            
+
             if (!gameCode || gameCode.length !== 4) {
-                alert('Veuillez entrer un code de partie valide (4 caract�res)');
+                alert('Veuillez entrer un code de partie valide (4 caractères)');
                 return;
             }
-            
-            const selectedSkin = document.querySelector('#br-skins-grid .skin-option.selected');
-            const playerSkin = {
-                color: selectedSkin?.dataset.color || '#2196F3',
-                color2: selectedSkin?.dataset.color2 || '#1565C0'
-            };
-            
+
             try {
-                const result = await joinGame(gameCode, playerName, playerSkin);
+                const result = await joinGame(gameCode, brSettings.playerName, brSettings.playerSkin);
                 console.log('Partie rejointe ! Code: ' + result.gameCode);
                 brLobby.classList.add('hidden');
-                
+
                 // Afficher la salle d'attente
-                new WaitingRoom(result.gameCode, false, playerName);
+                new WaitingRoom(result.gameCode, false, brSettings.playerName);
             } catch (error) {
                 alert('Erreur: ' + error.message);
             }
         });
     }
-    
-    // S�lection de skin pour BR
-    const brSkins = document.querySelectorAll('#br-skins-grid .skin-option');
-    brSkins.forEach(skin => {
-        skin.addEventListener('click', () => {
-            brSkins.forEach(s => s.classList.remove('selected'));
-            skin.classList.add('selected');
-        });
-    });
+
+    // ========== INITIALISER LES LOBBIES ==========
+    initSoloLobby();
+    initBRLobby();
 });
 

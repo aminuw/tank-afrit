@@ -1,4 +1,4 @@
-/**
+﻿/**
  * WAITING ROOM - Salle d'attente Battle Royale
  * L'hôte peut lancer la partie quand il y a au moins 2 joueurs
  */

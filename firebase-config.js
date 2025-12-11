@@ -1,4 +1,4 @@
-/**
+﻿/**
  * FIREBASE CONFIGURATION - TANK AFRIT
  * Projet: tank-afrit
  * Database: europe-west1
@@ -35,22 +35,22 @@ function initFirebase() {
         }
 
         database = firebase.database();
-        console.log('✅ Firebase initialized successfully');
+        console.log('âœ… Firebase initialized successfully');
         return true;
     } catch (error) {
-        console.error('❌ Firebase initialization error:', error);
+        console.error('âŒ Firebase initialization error:', error);
         return false;
     }
 }
 
-// Générer un ID unique pour le joueur
+// GÃ©nÃ©rer un ID unique pour le joueur
 function generatePlayerId() {
     return 'player_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 }
 
-// Générer un code de partie (4 caractères)
+// GÃ©nÃ©rer un code de partie (4 caractÃ¨res)
 function generateGameCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Sans I, O, 0, 1 pour éviter confusion
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Sans I, O, 0, 1 pour Ã©viter confusion
     let code = '';
     for (let i = 0; i < 4; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -58,7 +58,7 @@ function generateGameCode() {
     return code;
 }
 
-// Créer une nouvelle partie
+// CrÃ©er une nouvelle partie
 async function createGame(hostName, hostSkin) {
     const gameCode = generateGameCode();
     const playerId = generatePlayerId();
@@ -103,10 +103,10 @@ async function createGame(hostName, hostSkin) {
     try {
         await database.ref('games/' + gameCode).set(gameData);
         currentGameRef = database.ref('games/' + gameCode);
-        console.log('✅ Game created:', gameCode);
+        console.log('âœ… Game created:', gameCode);
         return { gameCode, playerId };
     } catch (error) {
-        console.error('❌ Error creating game:', error);
+        console.error('âŒ Error creating game:', error);
         return null;
     }
 }
@@ -126,13 +126,13 @@ async function joinGame(gameCode, playerName, playerSkin) {
 
         const gameData = snapshot.val();
 
-        // Vérifier si la partie est pleine
+        // VÃ©rifier si la partie est pleine
         const playerCount = Object.keys(gameData.players || {}).length;
         if (playerCount >= gameData.maxPlayers) {
             throw new Error('Game is full');
         }
 
-        // Vérifier si la partie a déjà commencé
+        // VÃ©rifier si la partie a dÃ©jÃ  commencÃ©
         if (gameData.status !== 'waiting') {
             throw new Error('Game already started');
         }
@@ -154,23 +154,23 @@ async function joinGame(gameCode, playerName, playerSkin) {
         });
 
         currentGameRef = gameRef;
-        console.log('✅ Joined game:', gameCode);
+        console.log('âœ… Joined game:', gameCode);
         return { gameCode, playerId };
     } catch (error) {
-        console.error('❌ Error joining game:', error);
+        console.error('âŒ Error joining game:', error);
         throw error;
     }
 }
 
-// Marquer le joueur comme prêt
+// Marquer le joueur comme prÃªt
 async function setPlayerReady(ready = true) {
     if (!currentGameRef || !currentPlayerId) return;
 
     try {
         await currentGameRef.child('players/' + currentPlayerId + '/ready').set(ready);
-        console.log('✅ Player ready status:', ready);
+        console.log('âœ… Player ready status:', ready);
     } catch (error) {
-        console.error('❌ Error setting ready status:', error);
+        console.error('âŒ Error setting ready status:', error);
     }
 }
 
@@ -182,25 +182,25 @@ async function leaveGame() {
         // Retirer le joueur
         await currentGameRef.child('players/' + currentPlayerId).remove();
 
-        // Si c'était l'hôte, supprimer la partie
+        // Si c'Ã©tait l'hÃ´te, supprimer la partie
         const snapshot = await currentGameRef.once('value');
         const gameData = snapshot.val();
 
         if (gameData && gameData.host === currentPlayerId) {
             await currentGameRef.remove();
-            console.log('✅ Game deleted (host left)');
+            console.log('âœ… Game deleted (host left)');
         } else {
-            console.log('✅ Left game');
+            console.log('âœ… Left game');
         }
 
         currentGameRef = null;
         currentPlayerId = null;
     } catch (error) {
-        console.error('❌ Error leaving game:', error);
+        console.error('âŒ Error leaving game:', error);
     }
 }
 
-// Écouter les changements de la partie
+// Ã‰couter les changements de la partie
 function listenToGame(callback) {
     if (!currentGameRef) return;
 
@@ -209,20 +209,20 @@ function listenToGame(callback) {
         if (gameData) {
             callback(gameData);
         } else {
-            // La partie a été supprimée
+            // La partie a Ã©tÃ© supprimÃ©e
             callback(null);
         }
     });
 }
 
-// Arrêter d'écouter les changements
+// ArrÃªter d'Ã©couter les changements
 function stopListening() {
     if (currentGameRef) {
         currentGameRef.off();
     }
 }
 
-// Mettre à jour la position du joueur
+// Mettre Ã  jour la position du joueur
 async function updatePlayerPosition(x, y, angle, turretAngle, health, hidden) {
     if (!currentGameRef || !currentPlayerId) return;
 
@@ -237,7 +237,7 @@ async function updatePlayerPosition(x, y, angle, turretAngle, health, hidden) {
             lastUpdate: firebase.database.ServerValue.TIMESTAMP
         });
     } catch (error) {
-        console.error('❌ Error updating position:', error);
+        console.error('âŒ Error updating position:', error);
     }
 }
 
@@ -255,12 +255,12 @@ async function sendBullet(bulletId, x, y, angle, damage) {
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
 
-        // Supprimer la balle après 5 secondes (nettoyage)
+        // Supprimer la balle aprÃ¨s 5 secondes (nettoyage)
         setTimeout(() => {
             currentGameRef.child('bullets/' + bulletId).remove();
         }, 5000);
     } catch (error) {
-        console.error('❌ Error sending bullet:', error);
+        console.error('âŒ Error sending bullet:', error);
     }
 }
 
@@ -276,7 +276,7 @@ async function sendHit(targetId, damage) {
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
     } catch (error) {
-        console.error('❌ Error sending hit:', error);
+        console.error('âŒ Error sending hit:', error);
     }
 }
 
@@ -291,7 +291,7 @@ async function setPlayerDead(killerId = null) {
             deathTime: firebase.database.ServerValue.TIMESTAMP
         });
 
-        // Incrémenter les kills du tueur
+        // IncrÃ©menter les kills du tueur
         if (killerId) {
             const killerRef = currentGameRef.child('players/' + killerId + '/kills');
             await killerRef.transaction((currentKills) => {
@@ -299,7 +299,7 @@ async function setPlayerDead(killerId = null) {
             });
         }
     } catch (error) {
-        console.error('❌ Error setting player dead:', error);
+        console.error('âŒ Error setting player dead:', error);
     }
 }
 
@@ -323,12 +323,12 @@ async function getActiveGames() {
 
         return games;
     } catch (error) {
-        console.error('❌ Error getting active games:', error);
+        console.error('âŒ Error getting active games:', error);
         return [];
     }
 }
 
-// Nettoyer les anciennes parties (à appeler périodiquement)
+// Nettoyer les anciennes parties (Ã  appeler pÃ©riodiquement)
 async function cleanupOldGames() {
     try {
         const snapshot = await database.ref('games').once('value');
@@ -339,11 +339,11 @@ async function cleanupOldGames() {
             const gameData = childSnapshot.val();
             if (gameData.createdAt < oneHourAgo) {
                 childSnapshot.ref.remove();
-                console.log('🧹 Cleaned up old game:', gameData.code);
+                console.log('ðŸ§¹ Cleaned up old game:', gameData.code);
             }
         });
     } catch (error) {
-        console.error('❌ Error cleaning up games:', error);
+        console.error('âŒ Error cleaning up games:', error);
     }
 }
 
