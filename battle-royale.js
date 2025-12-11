@@ -432,20 +432,8 @@ class ShrinkingZone {
 }
 
 // Joueur distant avec ANTI-ROLLBACK
-class RemotePlayer {
+class RemotePlayer extends Tank {
     constructor(id, name, skin) {
-        this.id = id;
-        this.name = name;
-        this.color = skin?.color || '#FF0000';
-        this.color2 = skin?.color2 || '#AA0000';
-
-        // Position affichee (interpolee)
-        this.x = 0;
-        this.y = 0;
-        this.angle = 0;
-        this.turretAngle = 0;
-
-        // Position cible du serveur
         super(id, 0, 0, {
             name: name,
             color: skin ? skin.color : '#F44336',
@@ -526,6 +514,8 @@ class RemotePlayer {
     }
 
     draw(ctx) {
+        if (!this.isAlive) return;
+
         ctx.save();
         ctx.rotate(this.angle * Math.PI / 180);
 
