@@ -431,7 +431,7 @@ class ShrinkingZone {
     }
 }
 
-// Joueur distant avec ANTI-ROLLBACK
+// Joueur distant (Version Simple & Robuste)
 class RemotePlayer extends Tank {
     constructor(id, name, skin) {
         super(id, 0, 0, {
@@ -440,77 +440,62 @@ class RemotePlayer extends Tank {
             color2: skin ? skin.color2 : '#B71C1C'
         });
 
-        // BUFFER SNAPSHOT : Stocke l'etat du monde a des instants T pour interpolation
-        this.snapshots = [];
-        this.INTERPOLATION_OFFSET = 100; // ms de retard constant pour fluidite
+        // Position cible du serveur
+        this.targetX = 0;
+        this.targetY = 0;
+        this.targetAngle = 0;
+        this.targetTurretAngle = 0;
+
         this.isAlive = true;
+        this.initialized = false;
     }
 
     // Recevoir une mise a jour du serveur
     updateFromServer(data) {
-        const now = Date.now();
+        if (!this.initialized && data.x !== undefined) {
+            this.x = this.targetX = data.x;
+            this.y = this.targetY = data.y;
+            this.angle = this.targetAngle = data.angle || 0;
+            this.initialized = true;
+        }
 
-        this.snapshots.push({
-            t: now,
-            x: data.x,
-            y: data.y,
-            angle: data.angle,
-            turretAngle: data.turretAngle,
-            health: data.health,
-            alive: data.alive !== false,
-            hidden: data.hidden || false
-        });
-
-        // Garder le buffer propre
-        while (this.snapshots.length > 20) this.snapshots.shift();
+        if (data.x !== undefined) this.targetX = data.x;
+        if (data.y !== undefined) this.targetY = data.y;
+        if (data.angle !== undefined) this.targetAngle = data.angle;
+        if (data.turretAngle !== undefined) this.targetTurretAngle = data.turretAngle;
 
         this.hidden = data.hidden || false;
         if (data.health !== undefined) this.health = data.health;
         if (data.alive !== undefined) this.isAlive = data.alive;
     }
 
-    // Mise a jour position : Interpolation entre deux snapshots
+    // Mise a jour position : Interpolation Simple (Lerp)
     update(dt) {
-        const renderTime = Date.now() - this.INTERPOLATION_OFFSET;
+        if (!this.initialized) return;
 
-        let prev = null;
-        let next = null;
+        // Facteur de lissage (0.15 = bon compromis fluidite/reactivite)
+        const LERP = 0.15;
 
-        // Trouver les snapshots entourant le temps de rendu
-        for (let i = this.snapshots.length - 1; i >= 0; i--) {
-            if (this.snapshots[i].t <= renderTime) {
-                prev = this.snapshots[i];
-                if (i + 1 < this.snapshots.length) next = this.snapshots[i + 1];
-                break;
-            }
+        // Teleportation si trop loin (Lag spike ou respawn)
+        const dist = Math.sqrt((this.targetX - this.x) ** 2 + (this.targetY - this.y) ** 2);
+        if (dist > 300) {
+            this.x = this.targetX;
+            this.y = this.targetY;
+        } else {
+            this.x += (this.targetX - this.x) * LERP;
+            this.y += (this.targetY - this.y) * LERP;
         }
 
-        if (prev && next) {
-            // Interpolation
-            const totalTime = next.t - prev.t;
-            const ratio = Math.max(0, Math.min(1, (renderTime - prev.t) / totalTime));
+        // Interpolation Angle
+        let angleDiff = this.targetAngle - this.angle;
+        while (angleDiff > 180) angleDiff -= 360;
+        while (angleDiff < -180) angleDiff += 360;
+        this.angle += angleDiff * LERP;
 
-            this.x = prev.x + (next.x - prev.x) * ratio;
-            this.y = prev.y + (next.y - prev.y) * ratio;
-
-            let angleDiff = next.angle - prev.angle;
-            while (angleDiff > 180) angleDiff -= 360;
-            while (angleDiff < -180) angleDiff += 360;
-            this.angle = prev.angle + angleDiff * ratio;
-
-            let turretDiff = next.turretAngle - prev.turretAngle;
-            while (turretDiff > 180) turretDiff -= 360;
-            while (turretDiff < -180) turretDiff += 360;
-            this.turretAngle = prev.turretAngle + turretDiff * ratio;
-        } else if (prev) {
-            // Extrapolation (ou maintien) si pas de futur
-            this.x = prev.x; this.y = prev.y;
-            this.angle = prev.angle; this.turretAngle = prev.turretAngle;
-        } else if (this.snapshots.length > 0) {
-            // Initialisation
-            this.x = this.snapshots[0].x; this.y = this.snapshots[0].y;
-            this.angle = this.snapshots[0].angle; this.turretAngle = this.snapshots[0].turretAngle;
-        }
+        let turretDiff = this.targetTurretAngle - this.turretAngle;
+        while (turretDiff > 180) turretDiff -= 360;
+        while (turretDiff < -180) turretDiff += 360;
+        this.turretAngle += turretDiff * LERP;
     }
 
     draw(ctx) {
