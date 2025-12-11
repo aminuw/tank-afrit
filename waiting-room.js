@@ -10,7 +10,7 @@ class WaitingRoom {
         this.playerName = playerName;
         this.playerSkin = playerSkin || { color: '#2196F3', color2: '#1565C0' };
         this.players = new Map();
-        this.minPlayers = 2;
+        this.minPlayers = 1;
         this.maxPlayers = 10;
 
         // Sauvegarder la session immédiatement
