@@ -84,6 +84,18 @@ socket.on('playerKilled', ({ victimId, killerId }) => {
     // On pourrait ajouter un effet visuel ici ou dans battle-royale.js via le state update
 });
 
+socket.on('zoneUpdate', (zone) => {
+    gameState.zone = zone;
+    if (gameUpdateCallback) gameUpdateCallback({ zone: zone });
+});
+
+socket.on('gameOver', ({ winnerId }) => {
+    gameState.status = 'finished';
+    gameState.winnerId = winnerId;
+    alert(winnerId === socket.id ? "🏆 VICTOIRE ROYALE !" : "💀 GAME OVER");
+    // TODO: Afficher bel écran de fin
+});
+
 // --- ACTIONS JEU ---
 
 window.updatePlayerPosition = function (code, id, data) {

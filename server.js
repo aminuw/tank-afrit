@@ -42,12 +42,16 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerInput', (data) => {
-        // Relai ultra-rapide des positions (Client Authoritative pour la fluidité)
-        // Pour un jeu "Zero Lag" perçu, on fait confiance au client pour le mouvement
-        // et on broadcast immédiatement.
+        // Relai ultra-rapide des positions
         const room = getPlayerRoom(socket);
         if (room) {
             socket.to(room).emit('playerMoved', { id: socket.id, data: data });
+
+            // Mise à jour de l'état serveur (Pour la Zone et les collisions serv)
+            if (games[room] && games[room].players[socket.id]) {
+                games[room].players[socket.id].x = data.x;
+                games[room].players[socket.id].y = data.y;
+            }
         }
     });
 
@@ -80,6 +84,16 @@ io.on('connection', (socket) => {
         const code = getPlayerRoom(socket);
         if (code && games[code].hostId === socket.id) {
             games[code].status = 'playing';
+
+            // Initialisation de la Zone (Storm)
+            games[code].zone = {
+                x: 1000, y: 1000, // Centre de la map 2000x2000
+                radius: 1200,     // Commence large
+                targetRadius: 100,// Finit tout petit
+                shrinkSpeed: 0.3  // Vitesse de rétrécissement
+            };
+
+            startGameLoop(code);
             io.to(code).emit('gameStarted');
         }
     });
@@ -91,11 +105,65 @@ io.on('connection', (socket) => {
             io.to(code).emit('playerLeft', socket.id);
             // Si plus personne, on supprime la room
             if (Object.keys(games[code].players).length === 0) {
+                if (games[code].interval) clearInterval(games[code].interval);
                 delete games[code];
             }
         }
     });
 });
+
+function startGameLoop(code) {
+    if (games[code].interval) clearInterval(games[code].interval);
+
+    console.log(`🌀 Zone démarrée pour la game ${code}`);
+
+    games[code].interval = setInterval(() => {
+        const game = games[code];
+        if (!game) return;
+
+        // 1. Rétrécir la Zone
+        if (game.zone.radius > game.zone.targetRadius) {
+            game.zone.radius -= game.zone.shrinkSpeed;
+        }
+
+        // 2. Vérifier les joueurs (Dégâts de zone + Win Condition)
+        let aliveCount = 0;
+        let lastSurvivorId = null;
+        let someoneDied = false;
+
+        Object.values(game.players).forEach(p => {
+            if (p.hp > 0) {
+                aliveCount++;
+                lastSurvivorId = p.id;
+
+                // Est-il dans la zone ?
+                const dist = Math.sqrt(Math.pow(p.x - game.zone.x, 2) + Math.pow(p.y - game.zone.y, 2));
+                if (dist > game.zone.radius) {
+                    // Dégâts de storm
+                    p.hp -= 0.5;
+                    someoneDied = true; // Force update
+                    if (p.hp <= 0) {
+                        p.hp = 0;
+                        io.to(code).emit('playerKilled', { victimId: p.id, killerId: 'LA ZONE' });
+                    }
+                }
+            }
+        });
+
+        // 3. Victoire ? (S'il ne reste qu'un survivant et qu'on jouait)
+        if (Object.keys(game.players).length > 1 && aliveCount <= 1 && game.status === 'playing') {
+            clearInterval(game.interval);
+            game.status = 'finished';
+            console.log(`🏆 Victoire de ${lastSurvivorId}`);
+            io.to(code).emit('gameOver', { winnerId: lastSurvivorId });
+        }
+
+        // 4. Sync périodique (Zone + HP si storm damage)
+        io.to(code).emit('zoneUpdate', game.zone);
+        if (someoneDied) io.to(code).emit('updatePlayerList', game.players);
+
+    }, 100); // 10 ticks par seconde
+}
 
 function joinGameLocally(socket, code, name, skin, isHost) {
     socket.join(code);

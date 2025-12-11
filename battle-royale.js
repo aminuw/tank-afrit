@@ -76,6 +76,9 @@ class BattleRoyaleGame {
                 // Mise à jour de la map si reçue tardivement
                 if (state.map) this.map = state.map;
 
+                // Mise à jour de la Zone
+                if (state.zone) this.zone = state.zone;
+
                 // Mise à jour des joueurs (positions, vie...)
                 if (state.players) {
                     // CLIENT PREDICTION : On ne met à jour QUE les autres joueurs.
@@ -201,10 +204,8 @@ class BattleRoyaleGame {
                         if (dist < 25) { // Hitbox joueur
                             // HIT CONFIRMÉ !
                             console.log("HIT sur", p.name);
-
                             // 1. Envoi Damage au serveur
                             if (window.packetHit) window.packetHit(p.id, 10);
-
                             // 2. Supprimer la balle localement
                             this.bullets.splice(i, 1);
                             bulletRemoved = true;
