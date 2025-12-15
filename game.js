@@ -276,6 +276,9 @@ class Tank {
             regeneration: 0 // +1 HP/sec per level
         };
         this.lastRegen = 0;
+
+        // Pattern (skin customization)
+        this.pattern = opts.pattern || 'none';
     }
 
     dash(currentTime) {
@@ -515,6 +518,11 @@ class Tank {
         ctx.fillStyle = g;
         this.roundRect(ctx, -this.size / 2, -this.size / 2, this.size, this.size, 5);
         ctx.fill();
+
+        // Draw pattern on tank body
+        if (typeof drawTankPattern === 'function' && this.pattern && this.pattern !== 'none') {
+            drawTankPattern(ctx, this.pattern, this.size, this.color);
+        }
 
         ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
         this.roundRect(ctx, -this.size / 2, -this.size / 2, this.size, this.size, 5);
@@ -932,6 +940,540 @@ class BossTank extends Tank {
             ctx.arc(this.x, this.y, this.size + 10, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TANK PATTERNS SYSTEM (Skins personnalisables)
+// ═══════════════════════════════════════════════════════════════════════════
+const TANK_PATTERNS = {
+    none: { name: 'Uni', icon: '⬜' },
+    stripes: { name: 'Rayures', icon: '▤' },
+    camo: { name: 'Camouflage', icon: '🌿' },
+    stars: { name: 'Étoiles', icon: '⭐' },
+    flames: { name: 'Flammes', icon: '🔥' },
+    circuit: { name: 'Circuit', icon: '⚡' }
+};
+
+// Fonction pour dessiner les patterns sur un tank
+function drawTankPattern(ctx, pattern, size, color) {
+    if (!pattern || pattern === 'none') return;
+
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+
+    const hs = size / 2;
+
+    switch (pattern) {
+        case 'stripes':
+            // Rayures diagonales
+            for (let i = -size; i < size; i += 8) {
+                ctx.beginPath();
+                ctx.moveTo(i, -hs);
+                ctx.lineTo(i + size, hs);
+                ctx.stroke();
+            }
+            break;
+
+        case 'camo':
+            // Taches de camouflage
+            ctx.globalAlpha = 0.25;
+            for (let i = 0; i < 5; i++) {
+                const x = (Math.sin(i * 1.5) * hs * 0.6);
+                const y = (Math.cos(i * 2) * hs * 0.6);
+                const r = 5 + (i % 3) * 3;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            break;
+
+        case 'stars':
+            // Étoiles
+            ctx.globalAlpha = 0.4;
+            const drawStar = (cx, cy, spikes, outerR, innerR) => {
+                let rot = Math.PI / 2 * 3;
+                let step = Math.PI / spikes;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - outerR);
+                for (let i = 0; i < spikes; i++) {
+                    ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+                    rot += step;
+                    ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+                    rot += step;
+                }
+                ctx.lineTo(cx, cy - outerR);
+                ctx.closePath();
+                ctx.fill();
+            };
+            drawStar(0, 0, 5, 8, 4);
+            drawStar(-hs * 0.5, -hs * 0.4, 4, 4, 2);
+            drawStar(hs * 0.4, hs * 0.3, 4, 4, 2);
+            break;
+
+        case 'flames':
+            // Flammes
+            ctx.globalAlpha = 0.35;
+            ctx.fillStyle = 'rgba(255,100,0,0.4)';
+            for (let i = 0; i < 4; i++) {
+                const x = -hs + i * (size / 3);
+                ctx.beginPath();
+                ctx.moveTo(x, hs);
+                ctx.quadraticCurveTo(x + 5, 0, x, -hs * 0.5);
+                ctx.quadraticCurveTo(x + 8, -hs * 0.3, x + 10, hs);
+                ctx.fill();
+            }
+            break;
+
+        case 'circuit':
+            // Circuits électroniques
+            ctx.globalAlpha = 0.4;
+            ctx.strokeStyle = 'rgba(0,255,255,0.6)';
+            ctx.lineWidth = 1.5;
+            // Lignes horizontales
+            ctx.beginPath();
+            ctx.moveTo(-hs, -hs * 0.3);
+            ctx.lineTo(0, -hs * 0.3);
+            ctx.lineTo(0, 0);
+            ctx.lineTo(hs * 0.5, 0);
+            ctx.stroke();
+            // Points de connexion
+            ctx.fillStyle = 'rgba(0,255,255,0.8)';
+            ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-hs * 0.5, -hs * 0.3, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(hs * 0.5, 0, 2, 0, Math.PI * 2); ctx.fill();
+            break;
+    }
+    ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KAMIKAZE TANK - Rush et explose
+// ═══════════════════════════════════════════════════════════════════════════
+class KamikazeTank extends Tank {
+    constructor(id, x, y, wave = 1) {
+        super(id, x, y, {
+            color: '#FF5722', color2: '#E64A19', size: CONFIG.ENEMY_SIZE * 0.85,
+            speed: CONFIG.ENEMY_SPEED * 1.8 + wave * 5,
+            reverseSpeed: CONFIG.ENEMY_SPEED,
+            rotSpeed: CONFIG.ENEMY_ROTATION_SPEED * 1.5,
+            maxHealth: CONFIG.ENEMY_HEALTH * 0.5,
+            fireRate: 99999 // Ne tire pas
+        });
+        this.isKamikaze = true;
+        this.explosionDamage = 35 + wave * 5;
+        this.explosionRadius = 80;
+        this.chargeTime = 0;
+        this.isCharging = false;
+        this.pulseTime = 0;
+    }
+
+    updateAI(dt, player, t, w, h) {
+        if (!this.isAlive) return null;
+
+        const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
+        const toPlayer = Math.atan2(player.y - this.y, player.x - this.x) * 180 / Math.PI;
+
+        this.pulseTime += dt * 10;
+
+        // Toujours foncer vers le joueur
+        this.targetAngle = toPlayer;
+        this.turretAngle = toPlayer;
+
+        let aDiff = this.targetAngle - this.angle;
+        while (aDiff > 180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+
+        this.inputs.left = aDiff < -10;
+        this.inputs.right = aDiff > 10;
+        this.inputs.forward = Math.abs(aDiff) < 60;
+
+        // Charge mode quand proche
+        if (dist < 150) {
+            this.isCharging = true;
+            this.speed = CONFIG.ENEMY_SPEED * 2.5;
+        }
+
+        super.updateClassic(dt, w, h, t);
+        return null;
+    }
+
+    // Override pour explosion à la mort
+    checkExplosion(player) {
+        const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
+        return dist < this.explosionRadius;
+    }
+
+    draw(ctx) {
+        if (!this.isAlive) return;
+
+        // Effet de pulsation quand charge
+        if (this.isCharging) {
+            const pulse = Math.sin(this.pulseTime) * 0.5 + 0.5;
+            ctx.save();
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.fillStyle = '#FF5722';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size + 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        super.draw(ctx);
+
+        // Icône bombe
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('💣', this.x, this.y - this.size - 5);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SNIPER TANK - Tire de loin avec précision
+// ═══════════════════════════════════════════════════════════════════════════
+class SniperTank extends Tank {
+    constructor(id, x, y, wave = 1) {
+        super(id, x, y, {
+            color: '#7B1FA2', color2: '#4A148C', size: CONFIG.ENEMY_SIZE * 0.9,
+            speed: CONFIG.ENEMY_SPEED * 0.6,
+            reverseSpeed: CONFIG.ENEMY_SPEED * 0.8,
+            rotSpeed: CONFIG.ENEMY_ROTATION_SPEED * 0.7,
+            maxHealth: CONFIG.ENEMY_HEALTH * 0.7,
+            fireRate: 2500, // Tire lentement mais fort
+            turretLength: 55
+        });
+        this.isSniper = true;
+        this.bulletDamage = 25 + wave * 3;
+        this.optimalRange = 350;
+        this.aimTime = 0;
+        this.isAiming = false;
+        this.laserAlpha = 0;
+    }
+
+    updateAI(dt, player, t, w, h) {
+        if (!this.isAlive) return null;
+
+        const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
+        const toPlayer = Math.atan2(player.y - this.y, player.x - this.x) * 180 / Math.PI;
+        let bullet = null;
+
+        // Comportement: rester à distance optimale
+        if (dist < this.optimalRange - 50) {
+            // Trop proche, reculer
+            this.targetAngle = toPlayer + 180;
+            this.inputs.forward = true;
+            this.inputs.backward = false;
+        } else if (dist > this.optimalRange + 100) {
+            // Trop loin, approcher
+            this.targetAngle = toPlayer;
+            this.inputs.forward = true;
+            this.inputs.backward = false;
+        } else {
+            // Distance optimale, viser
+            this.inputs.forward = false;
+            this.inputs.backward = false;
+            this.isAiming = true;
+        }
+
+        // Tourelle vers joueur
+        let tDiff = toPlayer - this.turretAngle;
+        while (tDiff > 180) tDiff -= 360;
+        while (tDiff < -180) tDiff += 360;
+        this.turretAngle += tDiff * dt * 2;
+
+        // Rotation corps
+        let aDiff = this.targetAngle - this.angle;
+        while (aDiff > 180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+        this.inputs.left = aDiff < -5;
+        this.inputs.right = aDiff > 5;
+
+        // Laser de visée
+        if (this.isAiming && dist <= this.optimalRange + 100) {
+            this.laserAlpha = Math.min(1, this.laserAlpha + dt * 2);
+            this.aimTime += dt * 1000;
+
+            // Tir précis après visée
+            if (this.aimTime > 800 && Math.abs(tDiff) < 5 && this.canFire(t)) {
+                bullet = this.fire(t);
+                if (bullet) {
+                    bullet.damage = this.bulletDamage;
+                    bullet.speed = CONFIG.BULLET_SPEED * 1.3;
+                }
+                this.aimTime = 0;
+                this.laserAlpha = 0;
+            }
+        } else {
+            this.laserAlpha = Math.max(0, this.laserAlpha - dt * 3);
+            this.aimTime = 0;
+            this.isAiming = false;
+        }
+
+        super.updateClassic(dt, w, h, t);
+        return bullet;
+    }
+
+    draw(ctx) {
+        if (!this.isAlive) return;
+
+        // Laser de visée
+        if (this.laserAlpha > 0) {
+            ctx.save();
+            ctx.globalAlpha = this.laserAlpha * 0.5;
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 5]);
+            const r = this.turretAngle * Math.PI / 180;
+            ctx.beginPath();
+            ctx.moveTo(this.x + Math.cos(r) * this.turretLength, this.y + Math.sin(r) * this.turretLength);
+            ctx.lineTo(this.x + Math.cos(r) * 500, this.y + Math.sin(r) * 500);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        super.draw(ctx);
+
+        // Icône sniper
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🎯', this.x, this.y - this.size - 5);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MEDIC TANK - Soigne les ennemis proches
+// ═══════════════════════════════════════════════════════════════════════════
+class MedicTank extends Tank {
+    constructor(id, x, y, wave = 1) {
+        super(id, x, y, {
+            color: '#4CAF50', color2: '#2E7D32', size: CONFIG.ENEMY_SIZE * 0.9,
+            speed: CONFIG.ENEMY_SPEED * 0.8,
+            reverseSpeed: CONFIG.ENEMY_SPEED * 0.5,
+            rotSpeed: CONFIG.ENEMY_ROTATION_SPEED,
+            maxHealth: CONFIG.ENEMY_HEALTH * 0.6,
+            fireRate: 2000
+        });
+        this.isMedic = true;
+        this.healAmount = 15 + wave * 2;
+        this.healRadius = 120;
+        this.lastHeal = 0;
+        this.healCooldown = 2000;
+        this.healPulse = 0;
+    }
+
+    updateAI(dt, player, t, w, h, allEnemies = []) {
+        if (!this.isAlive) return null;
+
+        let bullet = null;
+        const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
+        const toPlayer = Math.atan2(player.y - this.y, player.x - this.x) * 180 / Math.PI;
+
+        // Chercher un allié blessé à soigner
+        let targetAlly = null;
+        let minHealthPercent = 1;
+
+        for (const enemy of allEnemies) {
+            if (enemy === this || !enemy.isAlive) continue;
+            const eDist = Math.sqrt((this.x - enemy.x) ** 2 + (this.y - enemy.y) ** 2);
+            const healthPercent = enemy.health / enemy.maxHealth;
+            if (eDist < 300 && healthPercent < minHealthPercent && healthPercent < 0.8) {
+                minHealthPercent = healthPercent;
+                targetAlly = enemy;
+            }
+        }
+
+        // Comportement
+        if (targetAlly) {
+            // Aller vers l'allié blessé
+            const toAlly = Math.atan2(targetAlly.y - this.y, targetAlly.x - this.x) * 180 / Math.PI;
+            this.targetAngle = toAlly;
+            const allyDist = Math.sqrt((this.x - targetAlly.x) ** 2 + (this.y - targetAlly.y) ** 2);
+            this.inputs.forward = allyDist > this.healRadius * 0.5;
+        } else if (dist < 200) {
+            // Fuir le joueur
+            this.targetAngle = toPlayer + 180;
+            this.inputs.forward = true;
+        } else {
+            // Patrouiller
+            this.inputs.forward = Math.random() > 0.5;
+        }
+
+        // Rotation corps
+        let aDiff = this.targetAngle - this.angle;
+        while (aDiff > 180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+        this.inputs.left = aDiff < -8;
+        this.inputs.right = aDiff > 8;
+
+        // Tourelle vers joueur (pour se défendre)
+        let tDiff = toPlayer - this.turretAngle;
+        while (tDiff > 180) tDiff -= 360;
+        while (tDiff < -180) tDiff += 360;
+        this.turretAngle += tDiff * dt * 3;
+
+        // Tir défensif
+        if (dist < 250 && Math.abs(tDiff) < 20 && this.canFire(t)) {
+            bullet = this.fire(t);
+            if (bullet) bullet.damage = CONFIG.ENEMY_BULLET_DAMAGE * 0.7;
+        }
+
+        // Soigner les alliés proches
+        this.healPulse = Math.max(0, this.healPulse - dt);
+        if (t - this.lastHeal > this.healCooldown) {
+            for (const enemy of allEnemies) {
+                if (enemy === this || !enemy.isAlive) continue;
+                const eDist = Math.sqrt((this.x - enemy.x) ** 2 + (this.y - enemy.y) ** 2);
+                if (eDist < this.healRadius && enemy.health < enemy.maxHealth) {
+                    enemy.heal(this.healAmount);
+                    this.lastHeal = t;
+                    this.healPulse = 0.5;
+                    break;
+                }
+            }
+        }
+
+        super.updateClassic(dt, w, h, t);
+        return bullet;
+    }
+
+    draw(ctx) {
+        if (!this.isAlive) return;
+
+        // Zone de soin
+        ctx.save();
+        ctx.globalAlpha = 0.1 + this.healPulse * 0.3;
+        ctx.fillStyle = '#4CAF50';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.healRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = '#4CAF50';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+
+        super.draw(ctx);
+
+        // Icône croix médicale
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('➕', this.x, this.y - this.size - 5);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEALTH TANK - Invisible, apparaît soudainement
+// ═══════════════════════════════════════════════════════════════════════════
+class StealthTank extends Tank {
+    constructor(id, x, y, wave = 1) {
+        super(id, x, y, {
+            color: '#455A64', color2: '#263238', size: CONFIG.ENEMY_SIZE * 0.85,
+            speed: CONFIG.ENEMY_SPEED * 1.2,
+            reverseSpeed: CONFIG.ENEMY_SPEED,
+            rotSpeed: CONFIG.ENEMY_ROTATION_SPEED * 1.3,
+            maxHealth: CONFIG.ENEMY_HEALTH * 0.8,
+            fireRate: 1200
+        });
+        this.isStealth = true;
+        this.cloakAlpha = 0; // 0 = visible, 1 = invisible
+        this.isCloaked = true;
+        this.revealTime = 0;
+        this.revealDuration = 1500;
+        this.lastCloak = 0;
+        this.cloakCooldown = 4000;
+    }
+
+    updateAI(dt, player, t, w, h) {
+        if (!this.isAlive) return null;
+
+        let bullet = null;
+        const dist = Math.sqrt((this.x - player.x) ** 2 + (this.y - player.y) ** 2);
+        const toPlayer = Math.atan2(player.y - this.y, player.x - this.x) * 180 / Math.PI;
+
+        // Gestion du camouflage
+        if (this.isCloaked) {
+            this.cloakAlpha = Math.min(0.9, this.cloakAlpha + dt * 2);
+        } else {
+            this.cloakAlpha = Math.max(0, this.cloakAlpha - dt * 3);
+            this.revealTime += dt * 1000;
+            if (this.revealTime > this.revealDuration && t - this.lastCloak > this.cloakCooldown) {
+                this.isCloaked = true;
+                this.revealTime = 0;
+                this.lastCloak = t;
+            }
+        }
+
+        // Comportement
+        this.targetAngle = toPlayer;
+        this.turretAngle = toPlayer;
+
+        if (this.isCloaked) {
+            // Approcher furtivement
+            this.inputs.forward = dist > 100;
+
+            // Attaquer par surprise quand proche
+            if (dist < 120) {
+                this.isCloaked = false;
+                this.revealTime = 0;
+            }
+        } else {
+            // Combattre
+            this.inputs.forward = dist > 150;
+            this.inputs.backward = dist < 80;
+
+            // Tir
+            let tDiff = toPlayer - this.turretAngle;
+            while (tDiff > 180) tDiff -= 360;
+            while (tDiff < -180) tDiff += 360;
+
+            if (Math.abs(tDiff) < 15 && this.canFire(t)) {
+                bullet = this.fire(t);
+                if (bullet) bullet.damage = CONFIG.ENEMY_BULLET_DAMAGE * 1.3;
+            }
+        }
+
+        // Rotation corps
+        let aDiff = this.targetAngle - this.angle;
+        while (aDiff > 180) aDiff -= 360;
+        while (aDiff < -180) aDiff += 360;
+        this.inputs.left = aDiff < -8;
+        this.inputs.right = aDiff > 8;
+
+        super.updateClassic(dt, w, h, t);
+        return bullet;
+    }
+
+    takeDamage(amt) {
+        // Se révèle quand touché
+        this.isCloaked = false;
+        this.revealTime = 0;
+        return super.takeDamage(amt);
+    }
+
+    draw(ctx) {
+        if (!this.isAlive) return;
+
+        ctx.save();
+        ctx.globalAlpha = 1 - this.cloakAlpha * 0.85;
+
+        // Effet de distorsion quand invisible
+        if (this.cloakAlpha > 0.5) {
+            ctx.filter = 'blur(1px)';
+        }
+
+        super.draw(ctx);
+        ctx.restore();
+
+        // Icône fantôme (seulement si visible)
+        if (this.cloakAlpha < 0.5) {
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('👻', this.x, this.y - this.size - 5);
         }
     }
 }
@@ -1423,6 +1965,7 @@ class Game {
                 name: this.playerName,
                 color: this.playerSkin.color,
                 color2: this.playerSkin.color2,
+                pattern: this.playerPattern || 'none',
                 maxHealth: CONFIG.PLAYER_MAX_HEALTH + diffConfig.playerHealthBonus
             });
             this.player.health = this.player.maxHealth;
@@ -1476,34 +2019,45 @@ class Game {
         if (this.enemies.length >= CONFIG.MAX_ENEMIES || this.enemiesThisWave <= 0) return;
 
         // Marge de sécurité pour garantir que les ennemis restent dans la map
-        const margin = 80; // Marge suffisante pour un tank de taille 32px
+        const margin = 80;
         const edge = Math.floor(Math.random() * 4);
         let x, y;
 
         // Spawn sur les bords MAIS toujours dans les limites de la map
-        if (edge === 0) {
-            // Haut
-            x = margin + Math.random() * (this.canvas.width - margin * 2);
-            y = margin;
-        }
-        else if (edge === 1) {
-            // Droite
-            x = this.canvas.width - margin;
-            y = margin + Math.random() * (this.canvas.height - margin * 2);
-        }
-        else if (edge === 2) {
-            // Bas
-            x = margin + Math.random() * (this.canvas.width - margin * 2);
-            y = this.canvas.height - margin;
-        }
-        else {
-            // Gauche
-            x = margin;
-            y = margin + Math.random() * (this.canvas.height - margin * 2);
+        if (edge === 0) { x = margin + Math.random() * (this.canvas.width - margin * 2); y = margin; }
+        else if (edge === 1) { x = this.canvas.width - margin; y = margin + Math.random() * (this.canvas.height - margin * 2); }
+        else if (edge === 2) { x = margin + Math.random() * (this.canvas.width - margin * 2); y = this.canvas.height - margin; }
+        else { x = margin; y = margin + Math.random() * (this.canvas.height - margin * 2); }
+
+        let e;
+        const id = `e_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+        // À partir de la vague 2, spawner des types spéciaux
+        if (this.wave >= 2) {
+            const roll = Math.random();
+            const specialChance = Math.min(0.6, 0.15 + (this.wave - 2) * 0.05); // 15% vague 2, +5% par vague, max 60%
+
+            if (roll < specialChance) {
+                // Choisir un type spécial
+                const typeRoll = Math.random();
+                if (typeRoll < 0.25) {
+                    e = new KamikazeTank(id, x, y, this.wave);
+                } else if (typeRoll < 0.50) {
+                    e = new SniperTank(id, x, y, this.wave);
+                } else if (typeRoll < 0.75) {
+                    e = new MedicTank(id, x, y, this.wave);
+                } else {
+                    e = new StealthTank(id, x, y, this.wave);
+                }
+            } else {
+                e = new EnemyTank(id, x, y, this.wave);
+            }
+        } else {
+            e = new EnemyTank(id, x, y, this.wave);
         }
 
-        const e = new EnemyTank(`e_${Date.now()}`, x, y, this.wave);
-        e.angle = Math.random() * 360; e.turretAngle = e.angle;
+        e.angle = Math.random() * 360;
+        e.turretAngle = e.angle;
 
         // Apply difficulty multipliers
         const diffConfig = this.difficultyConfigs[this.difficulty];
@@ -1634,8 +2188,30 @@ class Game {
 
         // Ennemis
         for (const e of this.enemies) {
-            const b = e.updateAI(dt, this.player, t, this.canvas.width, this.canvas.height);
+            // MedicTank needs access to all enemies for healing
+            let b;
+            if (e.isMedic) {
+                b = e.updateAI(dt, this.player, t, this.canvas.width, this.canvas.height, this.enemies);
+            } else {
+                b = e.updateAI(dt, this.player, t, this.canvas.width, this.canvas.height);
+            }
             if (b) this.bullets.push(b);
+
+            // Kamikaze collision check - explode when touching player
+            if (e.isKamikaze && e.isAlive && this.player.isAlive) {
+                const dist = Math.sqrt((e.x - this.player.x) ** 2 + (e.y - this.player.y) ** 2);
+                if (dist < e.size / 2 + this.player.size / 2) {
+                    // Explosion!
+                    const diffConfig = this.difficultyConfigs[this.difficulty];
+                    const damage = Math.floor(e.explosionDamage * diffConfig.enemyDamageMultiplier);
+                    this.player.takeDamage(damage);
+                    e.isAlive = false;
+                    this.explosions.push(new Explosion(e.x, e.y, 70, true));
+                    this.addShake(20);
+                    this.floatingTexts.push(new FloatingText(e.x, e.y - 30, `💥 -${damage}`, '#FF5722', 24));
+                    this.floatingTexts.push(new FloatingText(e.x, e.y, 'BOOM!', '#FFC107', 28));
+                }
+            }
         }
 
         // Boss AI
@@ -2161,6 +2737,114 @@ class Game {
         ctx.fillStyle = enemyCount > 0 ? '#FF5722' : '#4CAF50';
         ctx.fillText(`Ennemis: ${enemyCount} ${bossStatus}`, this.canvas.width / 2, p + 23);
 
+        // ═══════════════════════════════════════════════════════════════════
+        // MINI-MAP RADAR (bas droite)
+        // ═══════════════════════════════════════════════════════════════════
+        if (this.player) {
+            const radarSize = 140;
+            const radarX = this.canvas.width - radarSize - 15;
+            const radarY = this.canvas.height - radarSize - 40;
+            const radarScale = radarSize / Math.max(this.canvas.width, this.canvas.height);
+
+            // Fond du radar
+            ctx.save();
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = 'rgba(0,20,40,0.9)';
+            ctx.beginPath();
+            ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Cercles concentriques
+            ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = '#00FF88';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, (radarSize / 2) * (i / 3), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Croix centrale
+            ctx.beginPath();
+            ctx.moveTo(radarX + radarSize / 2, radarY + 10);
+            ctx.lineTo(radarX + radarSize / 2, radarY + radarSize - 10);
+            ctx.moveTo(radarX + 10, radarY + radarSize / 2);
+            ctx.lineTo(radarX + radarSize - 10, radarY + radarSize / 2);
+            ctx.stroke();
+
+            ctx.globalAlpha = 1;
+
+            // Clip au cercle du radar
+            ctx.beginPath();
+            ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2 - 2, 0, Math.PI * 2);
+            ctx.clip();
+
+            // Centre du radar = position du joueur
+            const centerRX = radarX + radarSize / 2;
+            const centerRY = radarY + radarSize / 2;
+
+            // Dessiner les ennemis
+            for (const e of this.enemies) {
+                const dx = (e.x - this.player.x) * radarScale;
+                const dy = (e.y - this.player.y) * radarScale;
+                const rx = centerRX + dx;
+                const ry = centerRY + dy;
+
+                // Couleur selon type
+                if (e.isKamikaze) ctx.fillStyle = '#FF5722';
+                else if (e.isSniper) ctx.fillStyle = '#9C27B0';
+                else if (e.isMedic) ctx.fillStyle = '#4CAF50';
+                else if (e.isStealth && e.cloakAlpha > 0.5) ctx.fillStyle = 'rgba(100,100,100,0.5)';
+                else if (e.isStealth) ctx.fillStyle = '#607D8B';
+                else ctx.fillStyle = '#F44336';
+
+                ctx.beginPath();
+                ctx.arc(rx, ry, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Dessiner le boss
+            if (this.boss && this.boss.isAlive) {
+                const dx = (this.boss.x - this.player.x) * radarScale;
+                const dy = (this.boss.y - this.player.y) * radarScale;
+                ctx.fillStyle = this.boss.rageMode ? '#FF1744' : '#9C27B0';
+                ctx.beginPath();
+                ctx.arc(centerRX + dx, centerRY + dy, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Joueur au centre (triangle)
+            ctx.fillStyle = '#00FF88';
+            ctx.save();
+            ctx.translate(centerRX, centerRY);
+            ctx.rotate(this.player.angle * Math.PI / 180);
+            ctx.beginPath();
+            ctx.moveTo(8, 0);
+            ctx.lineTo(-5, -5);
+            ctx.lineTo(-5, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            ctx.restore();
+
+            // Bordure du radar
+            ctx.strokeStyle = '#00FF88';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(radarX + radarSize / 2, radarY + radarSize / 2, radarSize / 2, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Label radar
+            ctx.font = 'bold 11px Rajdhani, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#00FF88';
+            ctx.fillText('RADAR', radarX + radarSize / 2, radarY - 5);
+        }
+
         ctx.textAlign = 'center';
         ctx.font = '14px Rajdhani, sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -2231,17 +2915,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let soloSettings = {
         playerName: 'Joueur',
         playerSkin: { color: '#2196F3', color2: '#1565C0' },
+        playerPattern: 'none',
         selectedMap: 'christmas',
         difficulty: 'medium'
     };
 
     let brSettings = {
         playerName: 'Joueur',
-        playerSkin: { color: '#2196F3', color2: '#1565C0' }
+        playerSkin: { color: '#2196F3', color2: '#1565C0' },
+        playerPattern: 'none'
     };
 
     // ========== FONCTIONS DE PREVIEW ==========
-    function renderTankPreview(ctx, canvas, skin, name) {
+    function renderTankPreview(ctx, canvas, skin, name, pattern = 'none') {
         ctx.fillStyle = '#0f0f23';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -2269,6 +2955,11 @@ document.addEventListener('DOMContentLoaded', () => {
         g.addColorStop(1, skin.color2);
         ctx.fillStyle = g;
         ctx.fillRect(-size / 2, -size / 2, size, size);
+
+        // Draw pattern on body
+        if (typeof drawTankPattern === 'function') {
+            drawTankPattern(ctx, pattern, size, skin.color);
+        }
 
         // Bordure
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
@@ -2323,6 +3014,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function initSoloLobby() {
         const nameInput = document.getElementById('player-name');
         const skins = document.querySelectorAll('#solo-lobby-overlay .skins-grid .skin-option');
+        const patterns = document.querySelectorAll('#solo-lobby-overlay .patterns-grid .pattern-option');
         const maps = document.querySelectorAll('.map-option');
         const difficulties = document.querySelectorAll('.difficulty-option');
         const previewCanvas = document.getElementById('tank-preview');
@@ -2330,7 +3022,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Rendu initial
         if (previewCtx) {
-            renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+            renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName, soloSettings.playerPattern);
         }
 
         // Sélection de skin
@@ -2345,7 +3037,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
                 if (previewCtx) {
-                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName, soloSettings.playerPattern);
+                }
+            });
+        });
+
+        // Sélection de pattern
+        patterns.forEach(pattern => {
+            pattern.addEventListener('click', () => {
+                patterns.forEach(p => p.classList.remove('selected'));
+                pattern.classList.add('selected');
+                soloSettings.playerPattern = pattern.dataset.pattern;
+
+                if (previewCtx) {
+                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName, soloSettings.playerPattern);
                 }
             });
         });
@@ -2373,7 +3078,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nameInput.addEventListener('input', () => {
                 soloSettings.playerName = nameInput.value.trim() || 'Joueur';
                 if (previewCtx) {
-                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName);
+                    renderTankPreview(previewCtx, previewCanvas, soloSettings.playerSkin, soloSettings.playerName, soloSettings.playerPattern);
                 }
             });
         }
@@ -2509,6 +3214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Appliquer les paramètres du lobby
                 game.playerName = soloSettings.playerName;
                 game.playerSkin = soloSettings.playerSkin;
+                game.playerPattern = soloSettings.playerPattern;
                 game.selectedMap = soloSettings.selectedMap;
                 game.difficulty = soloSettings.difficulty;
 

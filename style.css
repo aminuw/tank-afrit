@@ -1616,3 +1616,82 @@ body.christmas-mode::before {
     font-size: 1rem;
     margin: 20px 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PATTERN SELECTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+.pattern-selection {
+    margin-bottom: 2rem;
+}
+
+.pattern-selection label {
+    display: block;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-secondary);
+    margin-bottom: 1rem;
+    text-align: left;
+}
+
+.patterns-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+}
+
+.pattern-option {
+    padding: 0.8rem 0.4rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.pattern-option:hover {
+    transform: translateY(-3px) scale(1.05);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(0, 255, 136, 0.5);
+    box-shadow: 0 5px 15px rgba(0, 255, 136, 0.2);
+}
+
+.pattern-option.selected {
+    border-color: var(--color-primary);
+    background: rgba(0, 255, 136, 0.15);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+    transform: scale(1.08);
+}
+
+.pattern-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.pattern-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.pattern-option.selected .pattern-name {
+    color: var(--color-primary);
+}
+
+@media (max-width: 600px) {
+    .patterns-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .pattern-icon {
+        font-size: 1.2rem;
+    }
+    
+    .pattern-name {
+        font-size: 0.6rem;
+    }
+}
