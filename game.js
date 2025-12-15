@@ -28,6 +28,63 @@ const CONFIG = {
     BOSS_XP: 200,
     // Map Themes
     CHRISTMAS_MODE: true, // 🎄 ÉDITION NOËL ACTIVÉE
+    // Star Invincibility (Boss Kill)
+    STAR_DURATION: 8000, // 8 secondes
+    STAR_SPEED_BOOST: 1.5,
+    // Class System
+    CLASS_DURATION: 15000, // 15 secondes
+    // Danger Zones
+    DANGER_ZONE_DAMAGE: 15,
+    DANGER_ZONE_INTERVAL: 8000,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TANK CLASSES SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+const TANK_CLASSES = {
+    artillery: {
+        name: 'Artillery', icon: '🎯', color: '#FF5722',
+        damageBoost: 2.0, speedMult: 0.7, fireRateMult: 0.6,
+        special: 'explosive_shots', description: 'Tir explosif +100% dégâts'
+    },
+    scout: {
+        name: 'Scout', icon: '⚡', color: '#00BCD4',
+        damageBoost: 0.8, speedMult: 1.5, fireRateMult: 1.5,
+        special: 'infinite_dash', description: 'Dash infini +50% vitesse'
+    },
+    berserker: {
+        name: 'Berserker', icon: '🔥', color: '#F44336',
+        damageBoost: 1.3, speedMult: 1.1, fireRateMult: 1.2,
+        special: 'life_steal', description: 'Vole 5 HP par kill'
+    },
+    engineer: {
+        name: 'Engineer', icon: '🔧', color: '#9C27B0',
+        damageBoost: 0.9, speedMult: 0.9, fireRateMult: 1.0,
+        special: 'mines', description: 'Pose des mines (Espace)'
+    },
+    tank: {
+        name: 'Tank', icon: '🛡️', color: '#4CAF50',
+        damageBoost: 0.7, speedMult: 0.8, fireRateMult: 0.8,
+        special: 'shield', description: '+50% HP, -50% dégâts reçus'
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POWER-UP TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+const POWERUP_TYPES = {
+    health: { icon: '❤️', color: '#4CAF50', name: 'Santé' },
+    speed: { icon: '⚡', color: '#2196F3', name: 'Vitesse' },
+    star: { icon: '⭐', color: '#FFD700', name: 'Invincibilité' },
+    triple: { icon: '◉◉◉', color: '#9C27B0', name: 'Triple Tir' },
+    shield: { icon: '🛡️', color: '#00BCD4', name: 'Bouclier' },
+    freeze: { icon: '❄️', color: '#00E5FF', name: 'Gel' },
+    nuke: { icon: '☢️', color: '#FF1744', name: 'Nuke' },
+    class_artillery: { icon: '🎯', color: '#FF5722', name: 'Classe Artillery' },
+    class_scout: { icon: '⚡', color: '#00BCD4', name: 'Classe Scout' },
+    class_berserker: { icon: '🔥', color: '#F44336', name: 'Classe Berserker' },
+    class_engineer: { icon: '🔧', color: '#9C27B0', name: 'Classe Engineer' },
+    class_tank: { icon: '🛡️', color: '#4CAF50', name: 'Classe Tank' }
 };
 
 // Thèmes de maps avec décors
@@ -279,6 +336,26 @@ class Tank {
 
         // Pattern (skin customization)
         this.pattern = opts.pattern || 'none';
+
+        // Class System
+        this.activeClass = null;
+        this.classTimer = 0;
+        this.classEndTime = 0;
+        this.baseSpeed = this.speed;
+        this.baseFireRate = this.fireRate;
+        this.baseDamage = CONFIG.BULLET_DAMAGE;
+
+        // Star Invincibility
+        this.isInvincible = false;
+        this.starTimer = 0;
+        this.starEndTime = 0;
+        this.starFlash = 0;
+
+        // Special abilities
+        this.tripleShot = false;
+        this.tripleShotEnd = 0;
+        this.shieldHP = 0;
+        this.mines = [];
     }
 
     dash(currentTime) {
@@ -476,6 +553,108 @@ class Tank {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // CLASS SYSTEM
+    // ═══════════════════════════════════════════════════════════════════════
+    activateClass(classType, currentTime) {
+        if (!TANK_CLASSES[classType]) return;
+
+        const tankClass = TANK_CLASSES[classType];
+        this.activeClass = classType;
+        this.classEndTime = currentTime + CONFIG.CLASS_DURATION;
+
+        // Apply class modifiers
+        this.speed = this.baseSpeed * tankClass.speedMult;
+        this.fireRate = this.baseFireRate * (1 / tankClass.fireRateMult);
+        this.bulletDamage = this.baseDamage * tankClass.damageBoost;
+
+        // Special: Tank class gives +50% HP
+        if (classType === 'tank') {
+            const hpBoost = Math.floor(this.maxHealth * 0.5);
+            this.maxHealth += hpBoost;
+            this.health += hpBoost;
+        }
+    }
+
+    deactivateClass() {
+        if (!this.activeClass) return;
+
+        // Remove Tank class HP bonus
+        if (this.activeClass === 'tank') {
+            this.maxHealth = CONFIG.PLAYER_MAX_HEALTH + (this.skills.health * 20);
+            this.health = Math.min(this.health, this.maxHealth);
+        }
+
+        // Reset to base stats
+        this.speed = this.baseSpeed;
+        this.fireRate = this.baseFireRate;
+        this.bulletDamage = this.baseDamage;
+        this.activeClass = null;
+        this.applySkillEffects(); // Re-apply skill bonuses
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAR INVINCIBILITY
+    // ═══════════════════════════════════════════════════════════════════════
+    activateStar(currentTime) {
+        this.isInvincible = true;
+        this.starEndTime = currentTime + CONFIG.STAR_DURATION;
+        this.starFlash = 0;
+        // Speed boost during star
+        this.speed = this.baseSpeed * CONFIG.STAR_SPEED_BOOST;
+    }
+
+    deactivateStar() {
+        this.isInvincible = false;
+        // Reset speed
+        if (this.activeClass) {
+            this.speed = this.baseSpeed * TANK_CLASSES[this.activeClass].speedMult;
+        } else {
+            this.speed = this.baseSpeed;
+            this.applySkillEffects();
+        }
+    }
+
+    updateClassAndStar(currentTime, dt) {
+        // Update class timer
+        if (this.activeClass && currentTime >= this.classEndTime) {
+            this.deactivateClass();
+        }
+
+        // Update star timer
+        if (this.isInvincible) {
+            this.starFlash += dt * 20;
+            if (currentTime >= this.starEndTime) {
+                this.deactivateStar();
+            }
+        }
+
+        // Update triple shot
+        if (this.tripleShot && currentTime >= this.tripleShotEnd) {
+            this.tripleShot = false;
+        }
+    }
+
+    takeDamageWithEffects(amount) {
+        // Star invincibility blocks all damage
+        if (this.isInvincible) return false;
+
+        // Shield absorbs damage first
+        if (this.shieldHP > 0) {
+            const absorbed = Math.min(this.shieldHP, amount);
+            this.shieldHP -= absorbed;
+            amount -= absorbed;
+            if (amount <= 0) return false;
+        }
+
+        // Tank class reduces damage by 50%
+        if (this.activeClass === 'tank') {
+            amount = Math.floor(amount * 0.5);
+        }
+
+        return this.takeDamage(amount);
+    }
+
     draw(ctx) {
         if (!this.isAlive) return;
 
@@ -511,6 +690,24 @@ class Tank {
         }
         if (this.isDashing) {
             c1 = '#00FFFF'; c2 = '#0088FF';
+        }
+
+        // Star invincibility rainbow effect
+        if (this.isInvincible) {
+            const hue = (this.starFlash * 30) % 360;
+            c1 = `hsl(${hue}, 100%, 60%)`;
+            c2 = `hsl(${(hue + 60) % 360}, 100%, 40%)`;
+
+            // Glow effect
+            ctx.shadowColor = c1;
+            ctx.shadowBlur = 20 + Math.sin(this.starFlash) * 10;
+        }
+
+        // Class color overlay
+        if (this.activeClass && !this.isInvincible) {
+            const classColor = TANK_CLASSES[this.activeClass].color;
+            c1 = this.lerpColor(this.color, classColor, 0.4);
+            c2 = this.lerpColor(this.color2, classColor, 0.4);
         }
 
         const g = ctx.createLinearGradient(-this.size / 2, -this.size / 2, this.size / 2, this.size / 2);
@@ -1479,38 +1676,201 @@ class StealthTank extends Tank {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POWER-UP
+// POWER-UP (Extended)
 // ═══════════════════════════════════════════════════════════════════════════
 class PowerUp {
     constructor(x, y, type = 'health') {
-        this.x = x; this.y = y; this.type = type; this.size = 20;
+        this.x = x; this.y = y; this.type = type; this.size = 22;
         this.isAlive = true; this.bob = Math.random() * Math.PI * 2; this.rot = 0;
+        this.spawnTime = performance.now();
+        this.lifetime = 15000; // 15 seconds before disappearing
     }
-    update(dt) { this.rot += dt * 90; this.bob += dt * 3; }
-    checkCollision(tank) { return Math.sqrt((this.x - tank.x) ** 2 + (this.y - tank.y) ** 2) < this.size + tank.size / 2; }
-    apply(tank) {
-        if (this.type === 'health') tank.heal(35);
-        else if (this.type === 'speed') { tank.speed *= 1.3; setTimeout(() => tank.speed = CONFIG.PLAYER_SPEED, 5000); }
+
+    update(dt) {
+        this.rot += dt * 90;
+        this.bob += dt * 3;
+    }
+
+    checkCollision(tank) {
+        return Math.sqrt((this.x - tank.x) ** 2 + (this.y - tank.y) ** 2) < this.size + tank.size / 2;
+    }
+
+    apply(tank, game) {
+        const t = performance.now();
+
+        switch (this.type) {
+            case 'health':
+                tank.heal(35);
+                break;
+            case 'speed':
+                tank.speed *= 1.3;
+                setTimeout(() => tank.applySkillEffects(), 5000);
+                break;
+            case 'star':
+                tank.activateStar(t);
+                break;
+            case 'triple':
+                tank.tripleShot = true;
+                tank.tripleShotEnd = t + 10000;
+                break;
+            case 'shield':
+                tank.shieldHP = 50;
+                break;
+            case 'freeze':
+                // Freeze all enemies for 3 seconds
+                if (game && game.enemies) {
+                    game.enemies.forEach(e => {
+                        e.frozen = true;
+                        e.frozenUntil = t + 3000;
+                    });
+                }
+                break;
+            case 'nuke':
+                // Damage all enemies
+                if (game && game.enemies) {
+                    game.enemies.forEach(e => {
+                        e.takeDamage(30);
+                        if (game.floatingTexts) {
+                            game.floatingTexts.push(new FloatingText(e.x, e.y - 20, '☢️ -30', '#FF1744', 18));
+                        }
+                    });
+                    if (game.addShake) game.addShake(15);
+                }
+                break;
+            case 'class_artillery':
+            case 'class_scout':
+            case 'class_berserker':
+            case 'class_engineer':
+            case 'class_tank':
+                const classType = this.type.replace('class_', '');
+                tank.activateClass(classType, t);
+                break;
+        }
+
         this.isAlive = false;
     }
+
     draw(ctx) {
         const by = this.y + Math.sin(this.bob) * 6;
+        const typeInfo = POWERUP_TYPES[this.type] || POWERUP_TYPES.health;
+
         ctx.save();
         ctx.translate(this.x, by);
         ctx.rotate(this.rot * Math.PI / 180);
-        ctx.shadowColor = this.type === 'health' ? '#4CAF50' : '#2196F3';
+
+        // Glow effect
+        ctx.shadowColor = typeInfo.color;
         ctx.shadowBlur = 20;
-        ctx.fillStyle = ctx.shadowColor;
-        if (this.type === 'health') {
-            ctx.fillRect(-this.size / 2, -this.size / 6, this.size, this.size / 3);
-            ctx.fillRect(-this.size / 6, -this.size / 2, this.size / 3, this.size);
-        } else {
-            ctx.beginPath();
-            ctx.moveTo(5, -this.size / 2); ctx.lineTo(-8, 0); ctx.lineTo(-2, 0);
-            ctx.lineTo(-5, this.size / 2); ctx.lineTo(8, 0); ctx.lineTo(2, 0);
-            ctx.closePath(); ctx.fill();
-        }
+
+        // Background circle
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = typeInfo.color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Icon
+        ctx.fillStyle = '#FFF';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(typeInfo.icon, 0, 0);
+
         ctx.restore();
+    }
+
+    get shouldDespawn() {
+        return performance.now() - this.spawnTime > this.lifetime;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DANGER ZONE (Random Nuke Zones)
+// ═══════════════════════════════════════════════════════════════════════════
+class DangerZone {
+    constructor(x, y, radius = 100) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.warningTime = 2000; // 2s warning before explosion
+        this.activeTime = 3000; // 3s active damage zone
+        this.spawnTime = performance.now();
+        this.phase = 'warning'; // 'warning', 'active', 'done'
+        this.pulseTime = 0;
+    }
+
+    update(dt) {
+        const elapsed = performance.now() - this.spawnTime;
+        this.pulseTime += dt * 10;
+
+        if (this.phase === 'warning' && elapsed >= this.warningTime) {
+            this.phase = 'active';
+        } else if (this.phase === 'active' && elapsed >= this.warningTime + this.activeTime) {
+            this.phase = 'done';
+        }
+    }
+
+    checkCollision(tank) {
+        const dist = Math.sqrt((this.x - tank.x) ** 2 + (this.y - tank.y) ** 2);
+        return dist < this.radius + tank.size / 2;
+    }
+
+    draw(ctx) {
+        if (this.phase === 'done') return;
+
+        const pulse = Math.sin(this.pulseTime) * 0.3 + 0.7;
+
+        ctx.save();
+
+        if (this.phase === 'warning') {
+            // Warning phase - pulsing yellow/red border
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.strokeStyle = '#FF5722';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([10, 5]);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Warning icon
+            ctx.globalAlpha = pulse;
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FF5722';
+            ctx.fillText('⚠️', this.x, this.y);
+        } else if (this.phase === 'active') {
+            // Active phase - red danger zone
+            ctx.globalAlpha = 0.3 + pulse * 0.2;
+            ctx.fillStyle = '#FF1744';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.globalAlpha = 0.8;
+            ctx.strokeStyle = '#FF1744';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Radiation icon
+            ctx.globalAlpha = 1;
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('☢️', this.x, this.y);
+        }
+
+        ctx.restore();
+    }
+
+    get isDone() {
+        return this.phase === 'done';
+    }
+
+    get isActive() {
+        return this.phase === 'active';
     }
 }
 
@@ -2003,8 +2363,13 @@ class Game {
             this.releaseBoss();
         }
 
-        // Boss must be defeated too to complete wave
-        if (this.state === 'playing' && this.enemies.length === 0 && this.enemiesThisWave === 0 && !this.bossActive) {
+        // Wave completes ONLY when:
+        // 1. All enemies are dead
+        // 2. No more enemies to spawn
+        // 3. Boss is DEAD (not just !bossActive, the boss object must not be alive)
+        const bossDeadOrNone = !this.boss || !this.boss.isAlive;
+
+        if (this.state === 'playing' && this.enemies.length === 0 && this.enemiesThisWave === 0 && bossDeadOrNone && !this.bossActive) {
             this.state = 'wave_complete';
             this.waveStartTime = performance.now();
 
@@ -2013,6 +2378,40 @@ class Game {
                 this.startWave(this.wave + 1);
             }, 2000);
         }
+    }
+
+    // Spawn random danger zone
+    spawnDangerZone() {
+        if (!this.dangerZones) this.dangerZones = [];
+
+        const margin = 100;
+        const x = margin + Math.random() * (this.canvas.width - margin * 2);
+        const y = margin + Math.random() * (this.canvas.height - margin * 2);
+        const radius = 80 + Math.random() * 60;
+
+        this.dangerZones.push(new DangerZone(x, y, radius));
+    }
+
+    // Spawn power-up at position with random type
+    spawnPowerUp(x, y, forceType = null) {
+        let type = forceType;
+
+        if (!type) {
+            const roll = Math.random();
+            if (roll < 0.35) type = 'health';
+            else if (roll < 0.45) type = 'speed';
+            else if (roll < 0.50) type = 'triple';
+            else if (roll < 0.55) type = 'shield';
+            else if (roll < 0.58) type = 'freeze';
+            else if (roll < 0.60) type = 'nuke';
+            else {
+                // Class power-up
+                const classes = ['class_artillery', 'class_scout', 'class_berserker', 'class_engineer', 'class_tank'];
+                type = classes[Math.floor(Math.random() * classes.length)];
+            }
+        }
+
+        this.powerUps.push(new PowerUp(x, y, type));
     }
 
     spawnEnemy() {
@@ -2272,6 +2671,17 @@ class Game {
                         this.player.addXP(xpGain);
                         this.floatingTexts.push(new FloatingText(e.x, e.y - 70, `+${xpGain} XP`, '#00BCD4', 18));
 
+                        // Berserker life steal
+                        if (this.player.activeClass === 'berserker') {
+                            this.player.heal(5);
+                            this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 40, '+5 HP', '#F44336', 14));
+                        }
+
+                        // 20% chance to drop power-up
+                        if (Math.random() < 0.20) {
+                            this.spawnPowerUp(e.x, e.y);
+                        }
+
                         // Check if just leveled up
                         if (this.player.skillPoints > 0 && !this.showSkillUI) {
                             this.showSkillUI = true;
@@ -2300,6 +2710,23 @@ class Game {
                         this.explosions.push(new Explosion(this.boss.x, this.boss.y, 80, true));
                         this.addShake(25);
                         this.triggerSlowMo();
+
+                        // ⭐ BOSS KILLED - GIVE STAR INVINCIBILITY!
+                        this.player.activateStar(performance.now());
+                        this.floatingTexts.push(new FloatingText(
+                            this.player.x, this.player.y - 50,
+                            '⭐ INVINCIBLE! ⭐',
+                            '#FFD700', 32
+                        ));
+                        this.floatingTexts.push(new FloatingText(
+                            this.boss.x, this.boss.y,
+                            '👑 BOSS VAINCU! 👑',
+                            '#FF1744', 36
+                        ));
+
+                        // Reset boss
+                        this.boss = null;
+                        this.bossActive = false;
                     } else {
                         this.explosions.push(new Explosion(b.x, b.y, 20));
                         this.addShake(5);
@@ -2315,30 +2742,75 @@ class Game {
         // Update visual effects
         this.updateVisualEffects(dt);
 
-        // Power-up spawns
+        // Power-up spawns (every 15 seconds)
         if (t - this.lastPowerUpSpawn > 15000) {
-            const types = ['health', 'speed'];
-            this.powerUps.push(new PowerUp(100 + Math.random() * (this.canvas.width - 200), 100 + Math.random() * (this.canvas.height - 200), types[Math.floor(Math.random() * types.length)]));
+            const x = 100 + Math.random() * (this.canvas.width - 200);
+            const y = 100 + Math.random() * (this.canvas.height - 200);
+            this.spawnPowerUp(x, y);
             this.lastPowerUpSpawn = t;
+        }
+
+        // Danger zone spawning (every 8 seconds from wave 2+)
+        if (!this.lastDangerZoneSpawn) this.lastDangerZoneSpawn = t;
+        if (this.wave >= 2 && t - this.lastDangerZoneSpawn > CONFIG.DANGER_ZONE_INTERVAL) {
+            this.spawnDangerZone();
+            this.lastDangerZoneSpawn = t;
         }
     }
 
     updateVisualEffects(dt) {
+        const t = performance.now();
+
         // Explosions & textes
         this.explosions.forEach(e => e.update(dt));
         this.floatingTexts.forEach(f => f.update(dt));
+
+        // Power-ups
         this.powerUps.forEach(p => {
             p.update(dt);
             if (this.player && this.player.isAlive && p.checkCollision(this.player)) {
-                p.apply(this.player);
+                p.apply(this.player, this); // Pass game reference
                 this.explosions.push(new Explosion(p.x, p.y, 25));
-                this.floatingTexts.push(new FloatingText(p.x, p.y - 30, p.type === 'health' ? '+35 HP' : 'SPEED!', p.type === 'health' ? '#4CAF50' : '#2196F3', 20));
+
+                // Type-specific floating text
+                const typeInfo = POWERUP_TYPES[p.type] || POWERUP_TYPES.health;
+                let msg = typeInfo.name;
+                if (p.type === 'health') msg = '+35 HP';
+                else if (p.type === 'shield') msg = '🛡️ +50 Shield';
+                else if (p.type === 'star') msg = '⭐ INVINCIBLE!';
+                else if (p.type.startsWith('class_')) msg = `🎮 ${TANK_CLASSES[p.type.replace('class_', '')].name}!`;
+
+                this.floatingTexts.push(new FloatingText(p.x, p.y - 30, msg, typeInfo.color, 22));
             }
         });
 
+        // Danger Zones
+        if (!this.dangerZones) this.dangerZones = [];
+        this.dangerZones.forEach(zone => {
+            zone.update(dt);
+
+            // Damage player if in active danger zone
+            if (zone.isActive && this.player && this.player.isAlive && zone.checkCollision(this.player)) {
+                if (!this.player.isInvincible) {
+                    // Damage every 0.5 seconds
+                    if (!zone.lastDamageTime || t - zone.lastDamageTime > 500) {
+                        this.player.takeDamageWithEffects(CONFIG.DANGER_ZONE_DAMAGE);
+                        this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 30, `☢️ -${CONFIG.DANGER_ZONE_DAMAGE}`, '#FF1744', 18));
+                        zone.lastDamageTime = t;
+                    }
+                }
+            }
+        });
+
+        // Update player class and star timers
+        if (this.player && this.player.isAlive) {
+            this.player.updateClassAndStar(t, dt);
+        }
+
         this.explosions = this.explosions.filter(e => e.isAlive);
-        this.powerUps = this.powerUps.filter(p => p.isAlive);
+        this.powerUps = this.powerUps.filter(p => p.isAlive && !p.shouldDespawn);
         this.floatingTexts = this.floatingTexts.filter(f => f.isAlive);
+        this.dangerZones = this.dangerZones.filter(z => !z.isDone);
     }
 
     gameOver() {
@@ -2389,6 +2861,11 @@ class Game {
 
         // Draw game elements for all non-login states
         if (this.state !== 'login') {
+            // Draw danger zones first (below everything)
+            if (this.dangerZones) {
+                this.dangerZones.forEach(z => z.draw(ctx));
+            }
+
             this.powerUps.forEach(p => p.draw(ctx));
             this.enemies.forEach(e => e.draw(ctx));
             if (this.boss && this.boss.isAlive) this.boss.draw(ctx);
