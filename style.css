@@ -1202,7 +1202,7 @@ body.christmas-mode .btn-start:hover {
 }
 
 /* Snowflakes animation */
-body.christmas-mode::before {
+body.christmas-mode::before { display: none; /*
     content: '❄️ ❄️ ❄️ ❄️ ❄️ ❄️ ❄️ ❄️ ❄️ ❄️';
     position: fixed;
     top: -50px;

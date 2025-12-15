@@ -974,22 +974,36 @@ class EnemyTank extends Tank {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BOSS TANK
+// BOSS TANK (with custom image for wave 10)
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Preload boss image
+const FINAL_BOSS_IMAGE = new Image();
+FINAL_BOSS_IMAGE.src = 'image.png';
+
 class BossTank extends Tank {
     constructor(id, x, y, wave = 1) {
         const health = CONFIG.BOSS_HEALTH_BASE + (wave * CONFIG.BOSS_HEALTH_PER_WAVE);
+
+        // Wave 10 = FINAL BOSS with special stats
+        const isFinalBoss = (wave >= 10);
+        const bossSize = isFinalBoss ? CONFIG.BOSS_SIZE * 1.3 : CONFIG.BOSS_SIZE;
+        const bossHealth = isFinalBoss ? health * 2 : health;
+
         super(id, x, y, {
-            color: '#9C27B0', color2: '#6A1B9A', size: CONFIG.BOSS_SIZE,
-            speed: CONFIG.BOSS_SPEED,
+            color: isFinalBoss ? '#FFD700' : '#9C27B0',
+            color2: isFinalBoss ? '#FF6B00' : '#6A1B9A',
+            size: bossSize,
+            speed: isFinalBoss ? CONFIG.BOSS_SPEED * 1.2 : CONFIG.BOSS_SPEED,
             reverseSpeed: CONFIG.BOSS_SPEED * 0.6,
             rotSpeed: CONFIG.ENEMY_ROTATION_SPEED * 0.8,
-            maxHealth: health,
-            fireRate: CONFIG.BOSS_FIRE_RATE,
-            turretLength: 60
+            maxHealth: bossHealth,
+            fireRate: isFinalBoss ? CONFIG.BOSS_FIRE_RATE * 0.7 : CONFIG.BOSS_FIRE_RATE,
+            turretLength: isFinalBoss ? 70 : 60
         });
         this.isBoss = true;
         this.wave = wave;
+        this.isFinalBoss = isFinalBoss;
         this.state = 'chase';
         this.targetAngle = this.angle;
         this.lastThink = 0;
@@ -998,6 +1012,7 @@ class BossTank extends Tank {
         this.circleAngle = 0;
         this.rageMode = false;
         this.pulseTime = 0;
+        this.inCage = false;
     }
 
     updateAI(dt, player, t, w, h) {
@@ -1015,8 +1030,10 @@ class BossTank extends Tank {
         if (!this.rageMode && this.health <= this.maxHealth * 0.5) {
             this.rageMode = true;
             this.fireRate = CONFIG.BOSS_FIRE_RATE * 0.6;
-            this.color = '#FF1744';
-            this.color2 = '#C51162';
+            if (!this.isFinalBoss) {
+                this.color = '#FF1744';
+                this.color2 = '#C51162';
+            }
         }
 
         this.pulseTime += dt * 5;
@@ -1070,8 +1087,10 @@ class BossTank extends Tank {
 
             if (Math.abs(tDiff) < 20) {
                 if (this.attackPattern === 0 || this.rageMode) {
-                    for (let i = -1; i <= 1; i++) {
-                        const angle = this.turretAngle + (i * 15);
+                    // Spread shot
+                    const spread = this.isFinalBoss ? 5 : 3;
+                    for (let i = -Math.floor(spread / 2); i <= Math.floor(spread / 2); i++) {
+                        const angle = this.turretAngle + (i * 12);
                         const b = this.createBullet(angle);
                         if (b) bullets.push(b);
                     }
@@ -1114,28 +1133,104 @@ class BossTank extends Tank {
         if (!this.isAlive) return;
 
         const pulse = Math.sin(this.pulseTime) * 0.3 + 0.7;
-        ctx.save();
-        ctx.shadowColor = this.rageMode ? '#FF1744' : '#9C27B0';
-        ctx.shadowBlur = 30 * pulse;
-
-        super.draw(ctx);
-        ctx.restore();
 
         ctx.save();
-        ctx.font = 'bold 32px Arial';
-        ctx.textAlign = 'center';
-        const crownY = this.y - this.size - 35 + Math.sin(this.pulseTime * 2) * 5;
-        ctx.fillText('👑', this.x, crownY);
-        ctx.restore();
 
+        // Different rendering for final boss (wave 10) with image
+        if (this.isFinalBoss && FINAL_BOSS_IMAGE.complete) {
+            // Glow effect
+            ctx.shadowColor = this.rageMode ? '#FF0000' : '#FFD700';
+            ctx.shadowBlur = 40 * pulse;
+
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle * Math.PI / 180);
+
+            // Draw the image centered and scaled
+            const imgSize = this.size * 2.2;
+            ctx.drawImage(
+                FINAL_BOSS_IMAGE,
+                -imgSize / 2,
+                -imgSize / 2,
+                imgSize,
+                imgSize
+            );
+
+            ctx.restore();
+
+            // Draw turret on top
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.turretAngle * Math.PI / 180);
+
+            // Enhanced turret for final boss
+            const tg = ctx.createLinearGradient(0, -6, 0, 6);
+            tg.addColorStop(0, '#FFD700');
+            tg.addColorStop(0.5, '#FFA500');
+            tg.addColorStop(1, '#FF6B00');
+            ctx.fillStyle = tg;
+            ctx.fillRect(this.size / 4, -6, this.turretLength - this.size / 4, 12);
+
+            // Muzzle
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(this.turretLength, 0, 7, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // Crown for final boss
+            ctx.save();
+            ctx.font = 'bold 40px Arial';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 20;
+            const crownY = this.y - this.size - 50 + Math.sin(this.pulseTime * 2) * 8;
+            ctx.fillText('👑', this.x, crownY);
+            ctx.fillText('⭐', this.x - 30, crownY + 5);
+            ctx.fillText('⭐', this.x + 30, crownY + 5);
+            ctx.restore();
+
+            // Health bar
+            this.drawHealthBar(ctx);
+
+        } else {
+            // Regular boss rendering
+            ctx.shadowColor = this.rageMode ? '#FF1744' : '#9C27B0';
+            ctx.shadowBlur = 30 * pulse;
+
+            super.draw(ctx);
+            ctx.restore();
+
+            // Crown
+            ctx.save();
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            const crownY = this.y - this.size - 35 + Math.sin(this.pulseTime * 2) * 5;
+            ctx.fillText('👑', this.x, crownY);
+            ctx.restore();
+        }
+
+        // Rage aura
         if (this.rageMode) {
             ctx.save();
             ctx.globalAlpha = pulse * 0.3;
-            ctx.strokeStyle = '#FF1744';
-            ctx.lineWidth = 3;
+            ctx.strokeStyle = this.isFinalBoss ? '#FF0000' : '#FF1744';
+            ctx.lineWidth = this.isFinalBoss ? 5 : 3;
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size + 10, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.size + (this.isFinalBoss ? 20 : 10), 0, Math.PI * 2);
             ctx.stroke();
+            ctx.restore();
+        }
+
+        // "BOSS FINAL" text for wave 10
+        if (this.isFinalBoss && !this.inCage) {
+            ctx.save();
+            ctx.font = 'bold 16px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FFD700';
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 10;
+            ctx.fillText('⚔️ BOSS FINAL ⚔️', this.x, this.y + this.size + 25);
             ctx.restore();
         }
     }
@@ -2348,6 +2443,12 @@ class Game {
         // Show wave notification for 3 seconds then start
         setTimeout(() => {
             this.state = 'playing';
+
+            // RESET BOSS STATE for new wave (FIX: ensures boss is in cage each wave)
+            this.boss = null;
+            this.bossActive = false;
+            this.bossCage = null;
+
             // Spawn all enemies for this wave
             for (let i = 0; i < this.enemiesThisWave; i++) {
                 setTimeout(() => this.spawnEnemy(), i * 400);
@@ -2431,10 +2532,10 @@ class Game {
         let e;
         const id = `e_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-        // À partir de la vague 2, spawner des types spéciaux
+        // À partir de la vague 2, spawner des types spéciaux (AUGMENTÉ)
         if (this.wave >= 2) {
             const roll = Math.random();
-            const specialChance = Math.min(0.6, 0.15 + (this.wave - 2) * 0.05); // 15% vague 2, +5% par vague, max 60%
+            const specialChance = Math.min(0.80, 0.30 + (this.wave - 2) * 0.10); // 30% vague 2, +10% par vague, max 80%
 
             if (roll < specialChance) {
                 // Choisir un type spécial
@@ -3320,6 +3421,141 @@ class Game {
             ctx.textAlign = 'center';
             ctx.fillStyle = '#00FF88';
             ctx.fillText('RADAR', radarX + radarSize / 2, radarY - 5);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // SKILL/CLASS MENU (bas gauche) - Beautiful & Responsive
+        // ═══════════════════════════════════════════════════════════════════
+        if (this.player) {
+            const menuX = 15;
+            const menuY = this.canvas.height - 200;
+            const menuW = 180;
+            const menuH = 185;
+
+            // Background with glassmorphism effect
+            ctx.save();
+            ctx.fillStyle = 'rgba(10, 15, 30, 0.85)';
+            ctx.strokeStyle = 'rgba(0, 255, 136, 0.4)';
+            ctx.lineWidth = 2;
+
+            // Draw rounded rect
+            const r = 12;
+            ctx.beginPath();
+            ctx.moveTo(menuX + r, menuY);
+            ctx.lineTo(menuX + menuW - r, menuY);
+            ctx.quadraticCurveTo(menuX + menuW, menuY, menuX + menuW, menuY + r);
+            ctx.lineTo(menuX + menuW, menuY + menuH - r);
+            ctx.quadraticCurveTo(menuX + menuW, menuY + menuH, menuX + menuW - r, menuY + menuH);
+            ctx.lineTo(menuX + r, menuY + menuH);
+            ctx.quadraticCurveTo(menuX, menuY + menuH, menuX, menuY + menuH - r);
+            ctx.lineTo(menuX, menuY + r);
+            ctx.quadraticCurveTo(menuX, menuY, menuX + r, menuY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Title with glow
+            ctx.font = 'bold 14px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#00FF88';
+            ctx.shadowColor = '#00FF88';
+            ctx.shadowBlur = 8;
+            ctx.fillText('⚡ STATUT', menuX + menuW / 2, menuY + 20);
+            ctx.shadowBlur = 0;
+
+            // Skills mini-display
+            const skills = [
+                { key: '1', name: 'DMG', level: this.player.skills.damage, color: '#F44336', max: 10 },
+                { key: '2', name: 'CAD', level: this.player.skills.fireRate, color: '#FF9800', max: 10 },
+                { key: '3', name: 'VIT', level: this.player.skills.speed, color: '#4CAF50', max: 10 },
+                { key: '4', name: 'VIE', level: this.player.skills.health, color: '#2196F3', max: 10 },
+                { key: '5', name: 'REG', level: this.player.skills.regeneration, color: '#9C27B0', max: 10 }
+            ];
+
+            ctx.font = 'bold 11px Rajdhani, sans-serif';
+            ctx.textAlign = 'left';
+
+            skills.forEach((skill, i) => {
+                const sy = menuY + 35 + i * 18;
+
+                // Key badge
+                ctx.fillStyle = skill.color;
+                ctx.fillRect(menuX + 8, sy - 10, 16, 14);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(skill.key, menuX + 16, sy);
+
+                // Skill name
+                ctx.textAlign = 'left';
+                ctx.font = 'bold 11px Rajdhani';
+                ctx.fillStyle = '#FFF';
+                ctx.fillText(skill.name, menuX + 28, sy);
+
+                // Mini progress bar
+                const barX = menuX + 60;
+                const barW = 80;
+                const barH = 8;
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.fillRect(barX, sy - 8, barW, barH);
+                ctx.fillStyle = skill.color;
+                ctx.fillRect(barX, sy - 8, barW * (skill.level / skill.max), barH);
+
+                // Level text
+                ctx.fillStyle = '#FFF';
+                ctx.font = 'bold 10px Rajdhani';
+                ctx.textAlign = 'right';
+                ctx.fillText(skill.level, menuX + menuW - 10, sy);
+            });
+
+            // Skill points indicator (if available)
+            if (this.player.skillPoints > 0) {
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+                ctx.fillRect(menuX + 5, menuY + 125, menuW - 10, 22);
+                ctx.font = 'bold 13px Rajdhani';
+                ctx.textAlign = 'center';
+                const flash = 0.7 + Math.sin(Date.now() / 150) * 0.3;
+                ctx.fillStyle = `rgba(255, 215, 0, ${flash})`;
+                ctx.fillText(`🎯 [K] ${this.player.skillPoints} POINT(S)`, menuX + menuW / 2, menuY + 140);
+            }
+
+            // Active class/star indicator
+            let statusY = menuY + 155;
+
+            // Star invincibility
+            if (this.player.isInvincible) {
+                const timeLeft = Math.max(0, (this.player.starEndTime - performance.now()) / 1000).toFixed(1);
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+                ctx.fillRect(menuX + 5, statusY - 12, menuW - 10, 18);
+                ctx.font = 'bold 12px Rajdhani';
+                ctx.textAlign = 'center';
+                const hue = (Date.now() / 20) % 360;
+                ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+                ctx.fillText(`⭐ INVINCIBLE ${timeLeft}s`, menuX + menuW / 2, statusY);
+                statusY += 20;
+            }
+
+            // Active class
+            if (this.player.activeClass) {
+                const classInfo = TANK_CLASSES[this.player.activeClass];
+                const timeLeft = Math.max(0, (this.player.classEndTime - performance.now()) / 1000).toFixed(1);
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.3)';
+                ctx.fillRect(menuX + 5, statusY - 12, menuW - 10, 18);
+                ctx.font = 'bold 12px Rajdhani';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = classInfo ? classInfo.color : '#2196F3';
+                ctx.fillText(`${classInfo ? classInfo.icon : '🎮'} ${this.player.activeClass.toUpperCase()} ${timeLeft}s`, menuX + menuW / 2, statusY);
+            }
+
+            // Shield indicator
+            if (this.player.shieldHP > 0) {
+                ctx.font = 'bold 11px Rajdhani';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#00BCD4';
+                ctx.fillText(`🛡️ ${this.player.shieldHP} Shield`, menuX + menuW / 2, menuY + menuH - 8);
+            }
+
+            ctx.restore();
         }
 
         ctx.textAlign = 'center';
